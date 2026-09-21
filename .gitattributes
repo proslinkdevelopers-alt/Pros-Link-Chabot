@@ -1,0 +1,8 @@
+# Keep LF everywhere, including on Windows checkouts. Prisma checksums each
+# migration file, so a CRLF checkout would look like an edited migration.
+* text=auto eol=lf
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.png binary
+*.ico binary
