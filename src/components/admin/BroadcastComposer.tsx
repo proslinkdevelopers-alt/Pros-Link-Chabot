@@ -104,7 +104,6 @@ export function BroadcastComposer({
   const [numbers, setNumbers] = useState("");
   const [importing, setImporting] = useState(false);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
-  const [includeUnrouted, setIncludeUnrouted] = useState(false);
   const [activeWithinDays, setActiveWithinDays] = useState<string>("");
   const [limit, setLimit] = useState<string>("");
 
@@ -142,7 +141,7 @@ export function BroadcastComposer({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            includeUnrouted,
+            includeUnrouted: false,
             activeWithinDays: activeWithinDays ? Number(activeWithinDays) : null,
             limit: limit ? Number(limit) : null,
           }),
@@ -160,7 +159,7 @@ export function BroadcastComposer({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, audienceKind, includeUnrouted, activeWithinDays, limit]);
+  }, [open, audienceKind, activeWithinDays, limit]);
 
   // The same parse the create endpoint will run, so what the report says is
   // what will happen. Debounced harder than the segment count: this one is
@@ -242,7 +241,7 @@ export function BroadcastComposer({
           numbers: audienceKind === "list" ? numbers : undefined,
           audience: {
             kind: audienceKind,
-            includeUnrouted,
+            includeUnrouted: false,
             activeWithinDays: activeWithinDays ? Number(activeWithinDays) : null,
             limit: limit ? Number(limit) : null,
           },
@@ -457,16 +456,6 @@ export function BroadcastComposer({
 
         {audienceKind === "segment" ? (
           <>
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={includeUnrouted}
-                onChange={(e) => setIncludeUnrouted(e.target.checked)}
-                className="size-3.5 accent-[hsl(var(--primary))]"
-              />
-              Also include older contacts who never chose a business in the previous welcome menu
-            </label>
-
             <div className="grid gap-2 sm:grid-cols-2">
               <Field
                 label="Only contacts active in the last…"

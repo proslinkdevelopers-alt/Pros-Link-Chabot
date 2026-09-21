@@ -55,7 +55,7 @@ export default async function TemplatesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Support & Messaging"
+        eyebrow="WhatsApp"
         title="WhatsApp Templates"
         description="Meta-approved message templates. Broadcasts, acknowledgements and reminders all send through these — a template Meta has not approved cannot reach anyone outside the 24-hour reply window."
       />

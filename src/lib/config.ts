@@ -123,7 +123,23 @@ const schema = z.object({
   CRON_SECRET: optional,
 });
 
-const parsed = schema.safeParse(process.env);
+/**
+ * Meta's own names for the WhatsApp settings are accepted as well as the
+ * shorter ones this app has always read: WHATSAPP_PHONE_NUMBER_ID,
+ * WHATSAPP_ACCESS_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID. When both spellings
+ * are set, the short name wins.
+ */
+const ALIASES: Record<string, string> = {
+  WHATSAPP_PHONE_ID: "WHATSAPP_PHONE_NUMBER_ID",
+  WHATSAPP_TOKEN: "WHATSAPP_ACCESS_TOKEN",
+  WHATSAPP_WABA_ID: "WHATSAPP_BUSINESS_ACCOUNT_ID",
+};
+const source: Record<string, string | undefined> = { ...process.env };
+for (const [name, alias] of Object.entries(ALIASES)) {
+  if (!source[name] && source[alias]) source[name] = source[alias];
+}
+
+const parsed = schema.safeParse(source);
 
 /**
  * `next build` imports every route module to collect its metadata, so anything

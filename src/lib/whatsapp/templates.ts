@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { TemplateCategory, TemplateStatus } from "@prisma/client";
 import { config } from "@/lib/config";
 import { prisma } from "@/lib/db";
+import { DEPARTMENT } from "@/config/brand";
 
 /**
  * =============================================================================
@@ -358,7 +359,10 @@ export async function syncTemplates(): Promise<SyncOutcome> {
     };
 
     if (existing) {
-      await prisma.whatsappTemplate.update({ where: { id: existing.id }, data });
+      // A row another tenant owns is left alone; an unowned one now mirrors
+      // this account's template, so it becomes this tenant's.
+      if (existing.department && existing.department !== DEPARTMENT) continue;
+      await prisma.whatsappTemplate.update({ where: { id: existing.id }, data: { ...data, department: DEPARTMENT } });
       updated++;
     } else {
       await prisma.whatsappTemplate.create({
@@ -368,17 +372,16 @@ export async function syncTemplates(): Promise<SyncOutcome> {
           // for a template nobody has given one to.
           key: `${metaName}:${languageCode}`,
           name: humanTemplateName(metaName),
-          // Left unassigned: the WhatsApp Business Account may still hold
-          // templates written for BITSOL Institute, and stamping them as
-          // Marketing's here would make that claim on a guess.
-          department: null,
+          // The account in WHATSAPP_BUSINESS_ACCOUNT_ID is Pros-Link's, so
+          // every template it holds is too.
+          department: DEPARTMENT,
         },
       });
       created++;
     }
   }
 
-  const localOnly = await prisma.whatsappTemplate.count({ where: { metaId: null } });
+  const localOnly = await prisma.whatsappTemplate.count({ where: { metaId: null, department: DEPARTMENT } });
 
   return { ok: true, created, updated, localOnly, error: fetched.error };
 }

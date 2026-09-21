@@ -32,6 +32,7 @@ interface SimState {
 const START: SimState = { details: {}, state: undefined, records: {}, history: [], language: "en", optedOut: false, turns: 0 };
 
 export function BotSimulator() {
+  const [channel, setChannel] = useState<"WHATSAPP" | "WEB">("WHATSAPP");
   const [phone, setPhone] = useState("+923001234567");
   const [profileName, setProfileName] = useState("Test Customer");
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -58,7 +59,7 @@ export function BotSimulator() {
       const res = await fetch("/api/admin/bot/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, phone, profileName: profileName || undefined, ...sim }),
+        body: JSON.stringify({ input, channel, phone, profileName: channel === "WHATSAPP" ? profileName || undefined : undefined, ...sim }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "The turn failed.");
@@ -100,11 +101,23 @@ export function BotSimulator() {
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
       <Card className="flex h-[78dvh] flex-col overflow-hidden p-0">
-        <div className="flex flex-wrap items-center gap-2 border-b bg-[#075E54] px-4 py-3 text-white">
+        <div className={cn("flex flex-wrap items-center gap-2 border-b px-4 py-3 text-white", channel === "WHATSAPP" ? "bg-[#075E54]" : "bg-brand-ink")}>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">{BRAND.assistant.name}</p>
-            <p className="text-[11px] text-white/70">Simulator · nothing is sent or saved</p>
+            <p className="text-[11px] text-white/70">{channel === "WHATSAPP" ? "WhatsApp" : "Website"} simulator · nothing is sent or saved</p>
           </div>
+          <select
+            value={channel}
+            onChange={(event) => setChannel(event.target.value as "WHATSAPP" | "WEB")}
+            disabled={sim.turns > 0}
+            aria-label="Channel"
+            className="h-8 rounded-md border border-white/20 bg-white/10 px-2 text-xs text-white [&>option]:text-foreground"
+          >
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="WEB">Website</option>
+          </select>
+          {channel === "WHATSAPP" && (
+          <>
           <Input
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
@@ -120,6 +133,8 @@ export function BotSimulator() {
             aria-label="WhatsApp profile name"
             disabled={sim.turns > 0}
           />
+          </>
+          )}
           <Button size="sm" variant="ghost" className="h-8 text-white hover:bg-white/10 hover:text-white" onClick={reset}>
             <RotateCcw /> Restart
           </Button>

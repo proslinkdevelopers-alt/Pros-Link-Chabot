@@ -273,7 +273,7 @@ export function TemplateToolbar({
                 setForm((current) => ({ ...current, headerText: e.target.value }))
               }
               maxLength={60}
-              placeholder="BITSOL Marketing"
+              placeholder="Pros-Link"
             />
           </Field>
 

@@ -64,9 +64,9 @@ export interface AudienceFilter {
   /** For `list`: the numbers to message, already normalised to Meta's wa_id. */
   waIds?: string[];
   /**
-   * Also include contacts from before BITSOL Institute was retired who never
-   * picked a business in the old welcome menu. They are legitimate recipients,
-   * but they never actually asked about BITSOL Marketing, so it is opt-in.
+   * No longer honoured. Contacts without this tenant's department were written
+   * before the Pros-Link platform and never contacted Pros-Link, so a segment
+   * never includes them. Kept so stored drafts still parse.
    */
   includeUnrouted?: boolean;
   /**
@@ -102,12 +102,9 @@ export function audienceWhere(filter: AudienceFilter): Prisma.WhatsappContactWhe
     return where;
   }
 
-  // Archived Institute contacts are never part of a segment.
-  if (filter.includeUnrouted) {
-    where.OR = [{ department: DEPARTMENT }, { department: null }];
-  } else {
-    where.department = DEPARTMENT;
-  }
+  // Only people who have messaged Pros-Link. Contacts left from before the
+  // platform (no department) never asked to hear from Pros-Link.
+  where.department = DEPARTMENT;
 
   if (filter.activeWithinDays && filter.activeWithinDays > 0) {
     const since = new Date(Date.now() - filter.activeWithinDays * 24 * 60 * 60 * 1000);

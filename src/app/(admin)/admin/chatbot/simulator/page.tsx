@@ -17,7 +17,7 @@ export default async function SimulatorPage() {
         <ArrowLeft className="size-3.5" /> Chatbot Studio
       </Link>
       <PageHeader
-        eyebrow="WhatsApp assistant"
+        eyebrow="Assistant"
         title="Simulator"
         description="Talk to the assistant exactly as a customer would, with the live configuration. Nothing is sent to WhatsApp and nothing is written to the CRM."
       />

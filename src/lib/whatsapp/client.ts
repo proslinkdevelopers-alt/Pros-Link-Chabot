@@ -450,3 +450,30 @@ export function toDisplayPhone(waId: string): string {
   const digits = waId.replace(/\D/g, "");
   return digits ? `+${digits}` : waId;
 }
+
+/** Largest file the console will relay from Meta — WhatsApp's own document limit. */
+const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
+
+export type MediaDownload = { ok: true; body: ArrayBuffer; mime: string } | { ok: false; status: number; error: string };
+
+/**
+ * Fetch a photo or document a customer sent. Meta serves media in two steps:
+ * the media id resolves to a short-lived URL, which is fetched with the same
+ * access token. The token never reaches the browser.
+ */
+export async function downloadMedia(mediaId: string): Promise<MediaDownload> {
+  if (!config.whatsapp.token) return { ok: false, status: 503, error: "WhatsApp is not configured on this server." };
+  if (!/^[\w.-]{1,128}$/.test(mediaId)) return { ok: false, status: 400, error: "Invalid media id." };
+  const auth = { Authorization: `Bearer ${config.whatsapp.token}` };
+  try {
+    const meta = await fetch(`${GRAPH_HOST}/${config.whatsapp.apiVersion}/${encodeURIComponent(mediaId)}`, { headers: auth, signal: AbortSignal.timeout(15_000) });
+    const info = (await meta.json().catch(() => null)) as { url?: string; mime_type?: string; file_size?: number; error?: { message?: string } } | null;
+    if (!meta.ok || !info?.url) return { ok: false, status: meta.status === 404 ? 404 : 502, error: info?.error?.message ?? "Meta did not return the file — it may have expired." };
+    if (info.file_size && info.file_size > MAX_MEDIA_BYTES) return { ok: false, status: 413, error: "The file is too large to open here." };
+    const file = await fetch(info.url, { headers: auth, signal: AbortSignal.timeout(30_000) });
+    if (!file.ok) return { ok: false, status: 502, error: `Meta refused the download (${file.status}).` };
+    return { ok: true, body: await file.arrayBuffer(), mime: info.mime_type ?? file.headers.get("content-type") ?? "application/octet-stream" };
+  } catch (error) {
+    return { ok: false, status: 504, error: error instanceof Error ? error.message : "Could not reach Meta." };
+  }
+}

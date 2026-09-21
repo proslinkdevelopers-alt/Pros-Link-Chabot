@@ -89,7 +89,7 @@ export default async function BroadcastsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Support & Messaging"
+        eyebrow="WhatsApp"
         title="Broadcasts"
         description="Segmented WhatsApp campaigns sent through Meta-approved templates, always to opted-in audiences. Anyone who has sent STOP is excluded automatically."
       />
