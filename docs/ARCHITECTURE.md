@@ -1,263 +1,160 @@
-# Architecture — BITSOL AI Assistant
+# Architecture — Pros-Link platform
 
-_Designed & Developed by BITSOL MARKETING_
-
-The AI concierge and admin console for **BITSOL Marketing** — business services,
-digital solutions, AI automation and software development.
-
----
-
-## 1. System overview
+One Next.js 15 application (App Router, React 19, TypeScript) serves the public
+site, the web assistant, the WhatsApp webhook and the admin console, backed by
+PostgreSQL through Prisma. Redis is optional (shared rate limits).
 
 ```
-                        ┌──────────────────────────────┐
-  Visitor ──────────────▶  /chat  (ChatWindow, client) │
-                        └───────────────┬──────────────┘
-                                        │ POST /api/chat  { messages, conversationRef }
-                                        ▼
-                        ┌──────────────────────────────┐
-                        │  planAssistantTurn()         │
-                        │   1. detectLanguage()        │  ← EN / UR / Roman UR / PA
-                        │   2. retrieveKnowledge()     │  ← best-matching KB entries
-                        │   3. buildSystemPrompt()     │  ← identity, scope, entries,
-                        │                              │    what the customer told us
-                        └───────────────┬──────────────┘
-                                        │
-      SSE  meta → chunk… → done         ▼                    in parallel
-   ◀────────────────────────  representative's reply  ·  extractCustomerDetails()
-                                        │
-                                        ▼
-                        ┌──────────────────────────────┐
-                        │  Persistence (best effort)   │
-                        │  conversations · messages    │
-                        │  syncCapture() → leads ·     │
-                        │  meetings · tickets          │
-                        │  notifications · system_logs │
-                        └───────────────┬──────────────┘
-      SSE  capture {records}            │
-   ◀────────────────────────────────────┘
-
-  WhatsApp ──▶ /webhook ──▶ handler.ts ──▶ lib/bot/engine.ts (menus, flows,
-                                            intents, scoring, handover) and the
-                                            same planAssistantTurn() for answers
-                                            — see WHATSAPP_ASSISTANT.md
-  Staff ────▶ /admin  ──▶ middleware ──▶ requireAdmin() ──▶ Prisma queries
+                ┌────────────── Next.js app ──────────────────────────────┐
+ Website ──────▶│ /, /about           public pages (categories, services)  │
+ visitor        │ /chat  ──▶ /api/chat ─┐                                   │
+                │                       ├─▶ conversation engine ─┐          │
+ WhatsApp ─────▶│ /webhook ─────────────┘   (lib/bot/engine.ts)  │          │
+ (Meta Cloud)   │                                                ▼          │
+                │                          CRM runtime (lib/bot/crm-runtime)│──▶ PostgreSQL
+ Staff ────────▶│ /admin/*  ──▶ /api/admin/*  (permission-checked, audited) │
+                │ /api/cron/follow-ups  (scheduled WhatsApp follow-ups)     │──▶ Meta Graph API
+                └───────────────────────────────────────────────────────────┘──▶ AI provider (optional)
 ```
 
-**Stack.** Next.js 15 App Router (React 19, TypeScript) serving both UI and API
-route handlers on the Node runtime. PostgreSQL via Prisma is the system of
-record; Redis provides rate limiting and caching.
+## 1. Brand and tenancy
 
----
+`src/config/brand.ts` holds everything that identifies the business — name,
+tagline, business areas, colours, the assistant's and console's names, the
+reference prefix (`PL-`) and the tenant key `DEPARTMENT = "PROSLINK"`.
 
-## 2. The retired BITSOL Institute
+The database is shared with the platform this one replaced, whose rows are
+kept, untouched, for their owners. Isolation is by the `department` column:
 
-The product originally served two businesses — BITSOL Marketing and BITSOL
-Institute of Digital Media & AI — from one database. The Institute has been
-removed from the product, **not from the database**:
+- every write stamps `department = PROSLINK`;
+- every read filters on it with strict equality (`OWN` in
+  `src/lib/admin/queries.ts`); a row with a different or NULL department is
+  invisible to every page and every API, and loading one by id returns 404;
+- settings keys are namespaced `proslink.*`; sessions carry the tenant and
+  accounts of another tenant cannot sign in.
 
-| Where | What happened |
+Tables that belonged only to the previous business are kept under `Legacy*`
+models (same table names) and are not used by any code path.
+
+## 2. The conversation engine
+
+`src/lib/bot/engine.ts` takes one customer message and returns what to send
+and which CRM effects to apply. It does no I/O itself; a `BotRuntime` does.
+The same engine runs on:
+
+| Surface | Runtime |
 | --- | --- |
-| Institute-only tables | `courses`, `admissions`, `students`, `faculty`, `batches`, `enrollments`, `attendance`, `assignments`, `submissions`, `certificates`, `knowledge_base_institute` remain in `schema.prisma` and in PostgreSQL. No code reads or writes them. |
-| Shared tables | Keep their `department` column. `DEPARTMENT` in `src/lib/brands.ts` is the value stamped on everything the app writes. |
-| Admin reads | `OWN` (required columns) and `OWN_OR_GLOBAL` (nullable columns — keeps unassigned rows) in `src/lib/admin/queries.ts` filter every list; `isOwn()` guards pages and API routes that load one record by id, so an archived record is a `404` even with its URL. |
-| Staff | `isRetiredAccount()` in `src/lib/auth.ts` refuses Institute accounts at sign-in and on every console request, including sessions issued earlier. |
-| Browsers | The chat transcript key moved to `bitsol.chat.v2`, so a saved Institute conversation is not restored. |
-| WhatsApp | Buttons from the old two-business menu (`dept:*`) lead back to the welcome message; an Institute thread still inside its 24-hour window is not reused; leftover admission captures are ignored. |
+| WhatsApp webhook | `lib/whatsapp/handler.ts` → `lib/bot/whatsapp-runtime.ts` |
+| Web assistant | `app/api/chat/route.ts` → `lib/bot/crm-runtime.ts` (collects replies) |
+| Console simulator | `app/api/admin/bot/simulate` (read-only, nothing written) |
+| Tests | `lib/bot/__tests__/harness.ts` (no network, no database) |
 
-Why keep the tables in `schema.prisma`: removing a model from the schema makes
-the next `prisma migrate dev` generate a `DROP TABLE`. Dropping that data is an
-irreversible business decision, so it is left as an explicit future migration
-rather than something a routine schema change could do by accident.
+Order of precedence for a message: opt-out/opt-in (WhatsApp) → staff handling
+the thread → photos and documents → button/list taps → "menu" and greetings →
+frustration or a request for a person (handover) → corporate signals →
+the open flow → natural language (quote, service, tracking and callback
+requests start flows; everything else gets a model answer with next-step
+buttons).
 
----
+Everything the assistant says and asks — menus, flows, wording in English /
+Roman Urdu / Urdu, intents, teams, scoring, follow-ups — is configuration
+(`src/data/bot`), editable per section in Admin ▸ Chatbot Studio and stored in
+`settings` as `proslink.bot.<section>`. A stored section that no longer
+validates is ignored with a warning, never crashing the assistant.
 
-## 3. Layers
+Deterministic keyword detection (`lib/bot/detect.ts`) decides what a message is
+about and whether a ticket or quote is opened; the model only writes open
+answers. Without a model, those answers fall back to a handover offer.
 
-### Presentation
-- `src/app/page.tsx`, `about/` — public pages on the midnight surface.
-- `src/app/(chat)/chat` — the concierge. `ChatWindow` owns the transcript and
-  the streaming request; on wide screens a rail offers the common requests and
-  the service list, on phones `MenuPanel` does. Every entry sends a message —
-  there are no forms. `MessageBubble` shows a receipt under a reply whose turn
-  created a CRM record.
-- `src/app/(admin)/admin` — server-component modules; all data fetching is
-  server-side, with small client islands (`StatusSelect`, `ActivityComposer`,
-  `BroadcastComposer`, `TemplateToolbar`) for mutations.
-- `src/app/(auth)/login` — staff sign-in.
+**Honesty rules enforced in code:** contact details only from the company
+profile; products, specifications and availability only from published
+catalogue rows; brands only when verified and active; prices only from
+published pricing entries (none by default); a request that fails to save is
+never confirmed to the customer; tracking a request requires the phone number
+that raised it.
 
-### Design system
-bitsolmarketing.com's palette and type — midnight `#050816`, slate `#0F172A`,
-cyan `#00D9FF`, violet `#7C3AED`, blue `#2563EB`, self-hosted Montserrat.
+## 3. CRM effects
 
-`globals.css` defines two HSL token sets: `:root` (light — the admin workspace,
-where dense tables need contrast) and `.dark` (midnight — every public surface
-and the admin sidebar). A page opts into a surface with `className="dark"` on a
-wrapper rather than following the OS setting. Shared utilities: `brand-gradient`
-(the lit midnight backdrop), `bg-brand` (blue → violet call to action),
-`text-gradient`, `ring-gradient`, `bg-grid`, `eyebrow`. `Logo`/`LogoMark` in
-`components/branding` reproduce the main site's mark.
+`lib/bot/crm-runtime.ts` applies engine effects: lead create/update (with
+score, temperature and stage), quote requests, service tickets (machine type,
+brand, model, serial, priority, visit time, attachments), appointments,
+handovers, team alerts, opt-in/out and transcript persistence. Every contact is
+linked to one customer profile by phone number (last ten digits) or email
+(`lib/customers.ts`). New records notify staff in-app (`lib/notify.ts`) —
+everyone whose role can work that record, plus the assignee — and queue an
+email row for the team inbox.
 
-### Domain content
-`src/data/marketing` is the content source:
+## 4. Catalogue, knowledge and company profile
 
-- `services.ts` — 12 services × (overview, benefits, features, process, pricing
-  placeholder, portfolio, FAQs, keywords)
-- `knowledge-base.ts` — hand-written company entries **plus** one auto-derived
-  entry per service, so a catalogue edit updates the assistant's answers in
-  exactly one place
-- `menu.ts` — chat menu tree, welcome suggestions and quick replies
-
-### AI
-`src/lib/ai/` isolates every model detail behind one interface:
-
-```ts
-interface AIProvider {
-  name: string;
-  streamChat(opts): AsyncGenerator<string>;  // yields text chunks
-}
-```
-
-- `knowledge.ts` — keyword-overlap retrieval. Dependency-free by design so the
-  system runs anywhere; swapping in vector search touches only this file.
-- `system-prompt.ts` — the customer service representative: BITSOL Marketing's
-  identity, scope, catalogue, contacts, the retrieved entries, what the customer
-  has already told us, what the team still needs, and the rules for asking (help
-  first, one question per message, no fixed order, never twice, no pressure). It
-  also tells the model that individual courses and admissions are not offered,
-  so those questions get an honest answer rather than an invented one.
-- `customer.ts` — a JSON-only model call, run alongside every reply, that reads
-  the transcript for the customer's details, and the validation that keeps
-  invented details out of the CRM: a phone number or email must appear in what
-  the customer typed, BITSOL's own contacts are refused, services must exist and
-  meeting dates must be real future days. Phone numbers and emails are also
-  scanned for deterministically, so a provider outage does not lose them.
-- `intents.ts` — deterministic escalation detection, context-aware quick
-  replies, and `asksQuestion()`, which withholds chips under a reply that is
-  waiting on an answer.
-- `providers/` — Claude (default, `claude-opus-4-8`), OpenAI-compatible, Ollama
-  and Gemini. Selection is by `AI_PROVIDER`; nothing else knows which model runs.
-
-### Persistence
-Prisma over PostgreSQL. Tables in use: `marketing_leads`, `marketing_services`,
-`customers`, `projects`, `quotes`, `portfolio_items`, `reviews`,
-`knowledge_base_marketing`, `tickets`, `meetings`, `conversations`, `messages`,
-`crm_activities`, `media_assets`, `events`, `announcements`, `whatsapp_contacts`,
-`whatsapp_templates`, `broadcasts`, `broadcast_recipients`, `notifications`,
-`users`, `roles`, `permissions`, `settings`, `system_logs`, `analytics_daily`.
-
-Chat persistence is **best effort**: a database outage degrades history and
-analytics but never breaks a conversation.
-
-### Conversation capture
-`src/lib/capture.ts` keeps what the customer has told us on
-`conversations.capture` and turns it into records once there is enough to act on:
-
-| Record | Created when |
-| --- | --- |
-| `MarketingLead` | a name, a way to reach them, a need, and real interest (asking for the work, or sharing a number or email) |
-| `Meeting` (`REQUESTED`) | a consultation has a day and a time |
-| `Ticket` (`OPEN`) | an existing client has described a problem and can be reached |
-
-Each is created once per conversation, inside a transaction that locks the
-conversation row, so two WhatsApp messages a second apart cannot create two
-leads. Later turns write back only the fields the customer changed, which keeps
-an edit made in the console from being overwritten by the next message. On
-WhatsApp the sender's number and profile name stand in for details the customer
-has not typed.
-
----
-
-## 4. Streaming protocol
-
-`POST /api/chat` returns Server-Sent Events:
-
-| Event | Payload | Purpose |
+| Data | Source | Cache |
 | --- | --- | --- |
-| `meta` | `{ language }` | Sent **before** generation so the UI can set text direction while the model is still thinking |
-| `chunk` | `{ text }` | Incremental response text |
-| `done` | `{ ticketId?, suggestions? }` | The reply is complete: escalation reference and follow-up chips (an empty list when the reply asks a question). The client re-enables the composer here |
-| `capture` | `{ records }` | Sent after `done`, once the turn is stored: the leads, meetings and tickets this turn created, shown as receipts |
-| `error` | `{ message }` | Friendly failure |
+| Categories, products, verified brands | `product_categories`, `products`, `brands` | 30 s |
+| Knowledge base | `knowledge_base_marketing` (published rows, tenant-scoped) | 60 s |
+| Company profile | `settings` key `proslink.company` | 30 s |
+| Assistant configuration | `settings` keys `proslink.bot.*` | 30 s |
 
-The stream stays open past `done` only to deliver `capture`, so storing the turn
-and syncing the CRM never make the customer wait to type.
+Each cache is per server process and is cleared immediately on the instance
+that saves a change. With several instances, others catch up within the cache
+lifetime.
 
----
+## 5. Admin console
 
-## 5. Reference numbers
+Server components query Prisma directly; client components handle
+interaction. Pieces:
 
-Every customer-facing record gets a readable reference:
+- `components/admin/AdminShell.tsx` — sidebar from `nav.ts` (filtered by the
+  role's permissions), Ctrl+K search (`/api/admin/search`), notifications bell,
+  live counts per role.
+- `components/admin/ui.tsx` — page header, tables, filters, detail lists,
+  timeline, badges; `components/admin/client/*` — dialogs, toasts, inline
+  selects, note composer, editors.
+- `app/api/admin/[entity]/[id]` — one audited PATCH endpoint for leads,
+  customers, tickets, quotes and appointments, with a strict Zod schema per
+  entity, permission check before the record is loaded, technician
+  restrictions, tenant checks on linked records, timeline entries and
+  notifications.
+- Dedicated routes for creates, the catalogue, knowledge, team, settings,
+  conversations (assign, tag, close, convert to lead/quote/ticket, reply),
+  notifications, search, exports and WhatsApp media.
 
-```
-BM-LEAD-7F3K2Q9A     Lead / quote request
-BM-MTG-…             Meeting
-BM-TKT-…             Support ticket
-BM-CONV-…            Web conversation
-WA-CONV-…            WhatsApp conversation
-BM-BCAST-…           Broadcast
-```
+## 6. Security model
 
-The alphabet excludes look-alike characters (`0/O`, `1/I/L`) so references can be
-read aloud over the phone or WhatsApp without ambiguity. Records created before
-the Institute was retired may carry `BX-` or `BI-` prefixes.
+- **Authentication:** email + bcrypt password; HttpOnly `pl_session` JWT
+  (jose, HS256). Sign-in is throttled per IP and per account, with a generic
+  failure message and a constant-time dummy hash for unknown emails.
+- **Authorisation:** code-defined roles and permissions
+  (`lib/permissions.ts`). `lib/staff.ts` re-reads the account from the
+  database on every request, so deactivation and role changes take effect
+  immediately. Pages use `requirePagePermission`, APIs
+  `requireApiPermission` / `requireApiStaff`.
+- **CSRF:** state-changing console requests must come from the same origin.
+- **Validation:** Zod on every input; phone, email, URL (https only for
+  catalogue media) and length limits; unique constraints reported per field.
+- **Audit:** `system_logs` records actor, action, record, IP, and each changed
+  field's previous and new value (Admin ▸ Audit Log). Passwords never reach it.
+- **WhatsApp:** every webhook POST is verified with `X-Hub-Signature-256`;
+  delivery retries are idempotent on Meta's message id; media is relayed
+  server-side after a permission check, never exposing the token.
+- **Headers:** CSP (production), HSTS, X-Frame-Options, nosniff,
+  Referrer-Policy, Permissions-Policy.
+- **Secrets** only in the environment; `JWT_SECRET` is required (32+ chars) in
+  production.
 
----
+## 7. Data model (main tables)
 
-## 6. Multilingual support
-
-`src/lib/i18n.ts` classifies each message as `en`, `ur`, `ur_roman` or `pa`:
-
-- Arabic script present → Urdu, unless ≥2 Punjabi Shahmukhi markers → Punjabi
-- Otherwise Roman-script keyword scoring, requiring either two distinct markers
-  or one in a very short message — so an English sentence containing "hai" or
-  "ap" isn't misclassified
-
-The result drives the prompt's language directive, RTL rendering, the
-speech-synthesis/recognition BCP-47 tag, and the small UI dictionary. Full page
-copy stays in English; conversational content is generated in the user's
-language by the model.
-
----
-
-## 7. Security
-
-| Concern | Control |
+| Model | Purpose |
 | --- | --- |
-| Authentication | JWT (`jose`, HS256, Edge-safe) in an httpOnly, SameSite=Lax cookie; bcrypt password hashing |
-| Authorisation | Coarse `UserRole` tier (`AGENT`, `ADMIN`, `SUPER_ADMIN` reach the console) + fine-grained `Role`/`Permission` RBAC |
-| Admin access | Edge middleware → `requireAdmin()` in the layout → per-route checks (defence in depth) |
-| Archived data | `OWN` / `OWN_OR_GLOBAL` on lists, `isOwn()` on single records, `isRetiredAccount()` on sessions |
-| Input validation | Zod on every route handler; admin updates use a per-entity allow-list so no arbitrary field can be written |
-| Rate limiting | Redis fixed-window — 30 chat messages/min per IP, 5–6 submissions per 10 min; fails open when Redis is absent |
-| SQL injection | Prisma parameterised queries only |
-| XSS | React escaping; no `dangerouslySetInnerHTML`; the message renderer is a safe text formatter |
-| Secrets | Environment variables only; the Integrations page reports configured/not and never returns a value |
-| Audit | `system_logs` records action, entity, actor, IP and metadata for every mutation |
-| PII | The assistant is instructed never to request passwords, OTPs, card or CNIC numbers in chat |
-
----
-
-## 8. Accessibility & performance
-
-Keyboard-navigable controls, ARIA labels on icon buttons, screen-reader text on
-the typing indicator, RTL rendering for Urdu and Punjabi, `prefers-reduced-motion`
-respected globally, streaming responses for perceived speed, server components
-throughout the admin console, a splash shown once per browser session, fonts
-self-hosted (no build-time fetch), and SEO metadata in `layout.tsx`.
-
----
-
-## 9. Extension points
-
-- **Vector search** — replace the body of `retrieveKnowledge`; call sites unchanged.
-- **Notification delivery** — a worker reads `notifications` (status `QUEUED`)
-  and delivers via SMTP/SMS/WhatsApp. Queueing is already wired; transport is
-  deliberately out-of-band so a slow provider can't block a request.
-- **Another customer detail** — add the field to `CustomerDetails` and
-  `DETAIL_LABELS` and describe it in the extraction prompt (`lib/ai/customer.ts`);
-  the representative's prompt and the console's Customer details card pick it up
-  from `DETAIL_LABELS`. Map it to a column in `lib/capture.ts` if the CRM needs it.
-- **Dropping the Institute data** — export it, delete the retired models from
-  `schema.prisma`, and create a migration. Review the relations on `User` and
-  `Conversation` that point at them first.
+| `Lead` (`marketing_leads`) | Enquiries, pipeline stage, score, owner |
+| `Customer`, `CustomerAsset` | One profile per contact; machines on site |
+| `Quote` | Quote requests and quotations (line items entered by staff) |
+| `Ticket` | Service and support requests, technician assignment |
+| `Meeting` | Demonstrations, site visits, calls |
+| `Conversation`, `Message` | Website and WhatsApp threads, media ids |
+| `ProductCategory`, `Product`, `Brand` | Catalogue |
+| `KnowledgeArticle` | Knowledge base |
+| `CrmActivity` | Notes, calls, follow-ups, stage/status/assignment changes |
+| `Notification` | In-app notifications and queued email rows |
+| `SystemLog` | Audit log |
+| `WhatsappContact`, `WhatsappTemplate`, `Broadcast` | WhatsApp messaging |
+| `User`, `Role`, `Permission` | Staff accounts; roles mirrored from code |
+| `Setting` | Company profile and assistant configuration |

@@ -1,97 +1,148 @@
-# Deployment Guide — BITSOL AI Assistant
+# Deployment guide — Pros-Link platform
 
-_Designed & Developed by BITSOL MARKETING_
-
-This guide covers deploying to a production Linux server using **Docker +
-Nginx**, plus a **PM2** alternative and a **GitHub Actions** CI/CD outline.
+Production URL: **https://ai.pros-link.com**. This guide covers the
+environment, upgrading an existing database safely, Docker + Nginx, Hostinger
+Business, a PM2 alternative, the go-live checklist and operations.
 
 ---
 
 ## 1. Prerequisites
 
-- A Linux server (Ubuntu 22.04+ recommended) with a public IP / domain
-- Docker + Docker Compose **or** Node.js 20+ and PM2
-- PostgreSQL 14+ (managed or containerised) and Redis (optional but recommended)
-- An AI provider key (e.g. `ANTHROPIC_API_KEY`)
-- A domain name and TLS certificate (Let's Encrypt)
+- Node.js 20+ (or Docker)
+- PostgreSQL 14+ — managed (Neon, Supabase) or containerised
+- Redis — optional; recommended when running more than one instance
+- A domain with TLS (Let's Encrypt or the host's certificate)
+- For WhatsApp: a Meta app with the WhatsApp product and Pros-Link's business
+  number; for AI answers: a provider key (optional)
 
 ---
 
 ## 2. Environment
 
 ```bash
-git clone <your-repo-url> bitsol-assistant && cd bitsol-assistant
 cp .env.example .env
 ```
 
-Set production values in `.env`:
+`.env.example` documents every variable. For production:
 
-- `NODE_ENV=production`
-- `APP_URL` / `NEXT_PUBLIC_APP_URL` = `https://your-domain`
-- `DATABASE_URL` = production PostgreSQL
-- `REDIS_URL` = production Redis — **strongly recommended in production**, or
-  rate limiting fails open and allows every request
-- `JWT_SECRET` = `openssl rand -base64 48`
-- `AI_PROVIDER` + the matching API key (`AI_MODEL` is optional — each
-  provider has a default). Free option: `AI_PROVIDER=gemini` with a Google AI
-  Studio key; see the README for its limits.
-- On Claude Platform on AWS, also `ANTHROPIC_BASE_URL`
-  (`https://aws-external-anthropic.<region>.api.aws`) and `ANTHROPIC_WORKSPACE_ID`
-- `AI_EXTRACTION_MODEL` (optional) — a cheaper model from the same provider for
-  the per-turn call that reads the customer's details; defaults to `AI_MODEL`
-- `SALES_NOTIFY_EMAIL` — where new leads, meetings, tickets and handoffs are
-  announced
-- `SEED_ADMIN_PASSWORD` / `SEED_STAFF_PASSWORD` — **change these before seeding**
+- `APP_URL` and `NEXT_PUBLIC_APP_URL` = `https://ai.pros-link.com` — both must
+  be present when `npm run build` runs, not only when the server starts. Next
+  bakes `NEXT_PUBLIC_APP_URL` into the build, and the canonical URLs, sitemap,
+  robots.txt and social previews come from it; a build without it points them
+  all at `localhost`. The same goes for a build done in CI.
+- `DATABASE_URL` and `DIRECT_DATABASE_URL` (the non-pooled URL `prisma migrate`
+  uses — the same value unless your provider gives a separate direct URL).
+- `JWT_SECRET` — `openssl rand -base64 48`. The server refuses to start in
+  production with a missing, short or development secret.
+- WhatsApp: `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`,
+  `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, and
+  `WHATSAPP_BUSINESS_ACCOUNT_ID` for templates. (The short names
+  `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_WABA_ID` also work.)
+- AI (optional): `AI_PROVIDER` and the matching key; `AI_MODEL` is optional.
+- `CRON_SECRET` to enable WhatsApp follow-ups.
+- `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` for the first Super Admin.
+- `REDIS_URL` if you run several instances (rate limits are otherwise
+  per-process).
 
-Keep `.env` out of version control (already in `.gitignore`).
+Contact details are **not** environment variables: enter them in
+Admin ▸ Settings ▸ Company profile after the first sign-in.
+
+Keep `.env` out of version control (it is in `.gitignore`).
 
 ---
 
-## 3. Deploy with Docker Compose (recommended)
+## 3. Upgrading an existing database (the previous platform's)
+
+This platform can run on the same PostgreSQL database as the platform it
+replaced. The migrations are **additive only**: they add enum values, columns
+and tables, and never drop, rename or rewrite existing data. Rows written by the
+previous platform keep their department (or have none) and are invisible to
+every Pros-Link page and API.
+
+Do this in order:
+
+1. **Back up first.** Take a full, restorable dump and copy it off the server:
+   ```bash
+   pg_dump --format=custom --no-owner "$DIRECT_DATABASE_URL" -f pre-proslink-$(date +%F).dump
+   ```
+   Test that it restores into a scratch database before continuing:
+   ```bash
+   createdb pre_proslink_check && pg_restore --no-owner -d pre_proslink_check pre-proslink-*.dump
+   ```
+2. **Apply the migrations:** `npx prisma migrate deploy`. The two Pros-Link
+   migrations are `20260921090000_proslink_enum_values` (enum values, kept
+   separate because PostgreSQL cannot use a new enum value in the transaction
+   that adds it) and `20260921090100_proslink_platform`.
+3. **Seed:** `npm run db:seed` — roles, the first Super Admin, categories,
+   unverified brands and the starting knowledge base. It never deletes, never
+   overwrites what staff have edited, and never touches another tenant's rows.
+4. **Sign in and configure** (section 8).
+
+What happens to the previous platform's data:
+
+| Data | After the upgrade |
+| --- | --- |
+| Leads, customers, tickets, quotes, conversations, templates, contacts with another or no department | Kept, untouched, invisible in Pros-Link |
+| Tables used only by the previous business (services, projects, portfolio, courses…) | Kept under `Legacy*` models; no code reads them |
+| Staff accounts of the previous platform | Cannot sign in to Pros-Link |
+| WhatsApp contacts without a department | Never included in Pros-Link broadcasts |
+
+**Removing that data later** is a separate, deliberate decision for its owner —
+nothing in this platform deletes it. If it must go: export it first
+(`pg_dump --table=…` or `COPY (SELECT … WHERE department IS DISTINCT FROM 'PROSLINK') TO …`),
+confirm the export with its owner, then delete by department in a transaction.
+Never run a cleanup without a fresh, verified backup.
+
+For a brand-new Pros-Link database, steps 2 and 3 are all you need.
+
+---
+
+## 4. Docker Compose
 
 ```bash
+# .env must set POSTGRES_PASSWORD (the compose file refuses to start without it)
 docker compose up -d --build
 docker compose exec web npx prisma migrate deploy
 docker compose exec web npm run db:seed          # first deploy only
 docker compose logs -f web
 ```
 
-This starts `db` (Postgres), `redis`, and `web` (the app on port 3000).
+This starts `proslink-db` (PostgreSQL), `proslink-redis` and `proslink-web` on
+port 3000, with data in the `proslink_pgdata` and `proslink_redisdata` volumes.
 Health check: `curl http://localhost:3000/api/health`.
 
+> Moving an existing Docker install whose data lives in another volume? Point
+> the `db` service at that volume (declare it `external: true` under
+> `volumes:`) instead of starting on an empty one — and take the backup in
+> section 3 first.
+
 To update:
+
 ```bash
 git pull
 docker compose up -d --build web
 docker compose exec web npx prisma migrate deploy
 ```
 
-The seed is idempotent, so re-running it after editing the service catalogue
-in `src/data` pushes those changes into the database. It never deletes: records
-left from BITSOL Institute stay in the database, hidden from the app.
-
 ---
 
-## 4. Nginx reverse proxy + TLS
+## 5. Nginx reverse proxy + TLS
 
-`/etc/nginx/sites-available/bitsol`:
+`/etc/nginx/sites-available/proslink`:
 
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name ai.pros-link.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name your-domain.com;
+    server_name ai.pros-link.com;
 
-    ssl_certificate     /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
-    add_header X-Frame-Options SAMEORIGIN always;
+    ssl_certificate     /etc/letsencrypt/live/ai.pros-link.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ai.pros-link.com/privkey.pem;
 
     client_max_body_size 15m;
 
@@ -102,286 +153,173 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-
-    # Streaming (SSE) — disable proxy buffering for /api/chat.
-    location /api/chat {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 3600s;
     }
 }
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/bitsol /etc/nginx/sites-enabled/bitsol
+sudo ln -s /etc/nginx/sites-available/proslink /etc/nginx/sites-enabled/proslink
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d your-domain.com
+sudo certbot --nginx -d ai.pros-link.com
 ```
 
-> **Important:** `proxy_buffering off` on `/api/chat` is required so streamed
-> tokens — and the `meta` routing event that re-themes the UI — reach the
-> browser immediately.
->
-> `X-Forwarded-For` must be passed through: rate limiting and audit logs
-> identify clients by it.
+`X-Forwarded-For` must be passed through: rate limiting and the audit log
+identify clients by it. The app already sets HSTS, X-Frame-Options and a CSP.
 
 ### WhatsApp webhook behind the proxy
 
-The `location /` block above already serves `/webhook` — no extra nginx rule is
-needed. Two things must not be interfered with:
+The `location /` block serves `/webhook`. Two things must not be interfered
+with:
 
-- **The request body must arrive byte-for-byte.** The `X-Hub-Signature-256`
-  check is an HMAC over the raw bytes, so any module that rewrites, re-encodes
-  or pretty-prints JSON bodies will make every delivery fail with `401`.
-- **The `X-Hub-Signature-256` header must reach the app.** nginx forwards it by
-  default; a `proxy_set_header` block that whitelists headers must include it.
+- **The body must arrive byte-for-byte.** The `X-Hub-Signature-256` check is an
+  HMAC over the raw bytes; anything that rewrites JSON bodies makes every
+  delivery fail with `401`.
+- **The `X-Hub-Signature-256` header must reach the app.**
 
-Meta requires a publicly resolvable HTTPS endpoint with a valid certificate —
-finish `certbot` before registering the callback URL, or verification fails.
-
-Verify the endpoint is reachable before touching the Meta console:
+Meta needs a public HTTPS endpoint with a valid certificate. Check it before
+registering the callback in Meta:
 
 ```bash
-curl "https://your-domain.com/webhook?hub.mode=subscribe\
-&hub.verify_token=$WHATSAPP_VERIFY_TOKEN&hub.challenge=ping"
+curl "https://ai.pros-link.com/webhook?hub.mode=subscribe&hub.verify_token=$WHATSAPP_VERIFY_TOKEN&hub.challenge=ping"
 # → ping
 ```
 
+In Meta ▸ WhatsApp ▸ Configuration, set the callback URL
+`https://ai.pros-link.com/webhook`, the same verify token, and subscribe to the
+**messages** field. Admin ▸ WhatsApp shows the connection status.
+
 ---
 
-## 4b. Hostinger Business (shared hosting + Node.js)
+## 6. Hostinger Business (shared hosting + Node.js)
 
-Hostinger Business supports Node.js apps (up to 5) and can deploy straight from
-GitHub — but **its shared plans do not offer PostgreSQL**, only MySQL. Postgres
-is VPS-only.
-
-Do **not** convert the schema to MySQL to work around this. Eleven fields are
-`String[]` scalar lists (`keywords`, `benefits`, `features`, `process`,
-`curriculum`, `careers`, `projects`, `expertise`, `tags`, `variables`), and
-Prisma does not support scalar lists on MySQL. Converting means JSON columns or
-eleven join tables, plus rewriting the seed and every query that reads them.
-
-Use an **external managed Postgres** instead — the app connects over TLS and
-neither knows nor cares where the database lives.
-
-### Architecture
+Hostinger Business runs Node.js apps and deploys from GitHub, but its shared
+plans offer MySQL only; PostgreSQL is VPS-only. Do not convert the schema to
+MySQL — it relies on PostgreSQL features (scalar lists, enums, JSONB queries).
+Use an external managed PostgreSQL instead:
 
 ```
-ai.bitsolmarketing.com
+ai.pros-link.com
    ├── App    →  Hostinger Business · Node.js app (GitHub deploy)
-   ├── DB     →  Neon / Supabase free tier (external Postgres over TLS)
-   └── Redis  →  optional; Upstash, or omit and rate limiting fails open
+   ├── DB     →  Neon / Supabase (external PostgreSQL over TLS)
+   └── Redis  →  optional; Upstash
 ```
 
-### Steps
-
-1. **hPanel → Websites → Subdomain** — create `ai.bitsolmarketing.com`.
-2. **hPanel → Advanced → Node.js** — create an app:
-   - Node version **20+**
-   - Application root: the subdomain's directory
-   - Startup file: `node_modules/next/dist/bin/next` with args `start`
-     (or `npm start`)
-   - Connect the GitHub repository and select branch `main`
-3. **Environment variables** — set them in the Node.js app panel, not in a
-   committed file. At minimum: `DATABASE_URL`, `JWT_SECRET`, `AI_PROVIDER`,
-   the matching API key, `AI_MODEL`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-
-   > **Do not set `NODE_ENV=production` in the panel.** npm omits
-   > devDependencies whenever `NODE_ENV=production`, and the panel applies its
-   > variables to the install step too — so `npm ci` silently skips
-   > `tailwindcss`, `postcss`, `typescript` and the `prisma` CLI, all of which
-   > `next build` needs. The install reports success and the build then fails
-   > on a missing Tailwind plugin.
-   >
-   > It is unnecessary anyway: `scripts/build.mjs` pins `NODE_ENV=production`
-   > for the build, and `next start` sets it for the running server. The
-   > committed `.npmrc` (`include=dev`) defends against this even if the
-   > variable is set, but the simplest thing is to leave it out.
-4. **Build.** Run `npm ci && npx prisma generate && npm run build` in the app's
-   shell. Shared plans are tight on memory, so set this first:
-
+1. **hPanel → Websites → Subdomain** — create `ai.pros-link.com`.
+2. **hPanel → Advanced → Node.js** — create an app: Node **20+**, application
+   root the subdomain's directory, startup `npm start`, connected to the
+   repository and branch.
+3. **Environment variables** in the app panel (section 2).
+   > **Do not set `NODE_ENV=production` in the panel.** npm then skips
+   > devDependencies during install (Tailwind, TypeScript, the Prisma CLI), and
+   > the build fails. `scripts/build.mjs` and `next start` set it themselves;
+   > the committed `.npmrc` (`include=dev`) also guards against it.
+4. **Build** in the app shell. Shared plans are tight on memory:
    ```bash
    export LOW_MEMORY_BUILD=1
    export NODE_OPTIONS=--max-old-space-size=2048
    npm ci && npm run build
    ```
-
-   `LOW_MEMORY_BUILD=1` makes Next generate pages in a single in-process worker
-   instead of one per CPU. It is slower, but each worker otherwise holds its own
-   copy of the compiler, and that is what exhausts the memory allowance.
-
-   If it still dies, build in CI and deploy the output — see the note below.
-5. **Migrate and seed**, once, from the app shell:
+   `LOW_MEMORY_BUILD=1` generates pages in one in-process worker instead of one
+   per CPU. If it still fails, build in CI and deploy the output.
+5. **Migrate and seed** once — after the backup in section 3 if the database
+   already has data:
    ```bash
    npx prisma migrate deploy
    npm run db:seed
    ```
 6. **TLS** — enable the free SSL certificate for the subdomain in hPanel.
 
-### Known constraints
-
-### Debugging a failed build
-
-> **`Cannot find module 'tailwindcss'`** (or `typescript`, `postcss`, `prisma`)
->
-> devDependencies were skipped, because `NODE_ENV=production` was set during
-> `npm ci`. Remove that variable from the panel and reinstall, or run
-> `npm ci --include=dev`. The committed `.npmrc` should prevent it; if the host
-> ignores project `.npmrc`, use the flag.
-
-> **`<Html> should not be imported outside of pages/_document`**
->
-> This does **not** mean a page imports `<Html>` — this project imports
-> `next/document` nowhere, and `src/app/not-found.tsx` and `global-error.tsx`
-> exist specifically to prevent the fallback that produces it.
->
-> It is Next's *masking* error: something else crashed in the build worker, so
-> Next fell back to the pages-router error document to report it while
-> prerendering `/404`. **The real failure is in the lines above it.** On shared
-> hosting it is almost always the build being OOM-killed — set
-> `LOW_MEMORY_BUILD=1` as in step 4.
->
-> Confirm whether the fault is the code or the host by checking the **Build**
-> workflow on GitHub Actions: it runs `npm ci && npm run build` on a clean
-> Linux/Node 20 checkout with no environment configured. Green there plus red
-> on the host means the host is the problem.
+**If the build fails:** `Cannot find module 'tailwindcss'` means
+devDependencies were skipped (remove `NODE_ENV=production`, or
+`npm ci --include=dev`). `<Html> should not be imported outside of
+pages/_document` is Next masking another crash in the build worker — on shared
+hosting almost always memory; use step 4. The **Build** workflow in GitHub
+Actions builds a clean checkout with no environment: green there and red on the
+host means the host is the problem.
 
 | Constraint | Impact | Mitigation |
 | --- | --- | --- |
-| No PostgreSQL | Cannot host the DB locally | External Neon/Supabase (above) |
-| Limited build memory | `next build` OOM-killed, reported as the `<Html>` error | `LOW_MEMORY_BUILD=1`; else build in GitHub Actions and deploy `.next` + `node_modules` |
-| No Redis | Rate limiting fails open — every request allowed | Upstash free tier, or accept it and monitor `/admin/logs` |
-| Shared CPU | Slower cold responses under load | Move to a VPS if response times degrade |
-| Process restarts | In-memory state is lost | None needed — the app keeps no in-memory state |
+| No PostgreSQL | Database must be external | Neon / Supabase |
+| Limited build memory | Build killed | `LOW_MEMORY_BUILD=1`, or build in CI |
+| No Redis | Rate limits per process | Upstash, or run a single instance |
+| Process restarts | Short caches rebuilt | None needed |
 
-If more than one of these bites, move to a **Hostinger VPS** (KVM 1 is enough)
-and use the Docker Compose path in section 3 — same provider and billing, and
-`docker-compose.yml` already provisions Postgres and Redis.
+If several of these bite, move to a Hostinger VPS and use Docker Compose
+(section 4).
 
 ---
 
-## 5. Alternative — bare metal with PM2
+## 7. Alternative — PM2
 
 ```bash
-npm ci
-npx prisma generate
-npx prisma migrate deploy
-npm run build
+npm ci && npx prisma migrate deploy && npm run build
 npm run db:seed        # first deploy only
-
-pm2 start npm --name bitsol-web -- start
+pm2 start npm --name proslink-web -- start
 pm2 save && pm2 startup
 ```
 
-`ecosystem.config.js` (optional):
-```js
-module.exports = {
-  apps: [{
-    name: "bitsol-web",
-    script: "node_modules/next/dist/bin/next",
-    args: "start",
-    instances: "max",
-    exec_mode: "cluster",
-    env: { NODE_ENV: "production", PORT: 3000 },
-  }],
-};
-```
+Running several instances (`-i max`)? Set `REDIS_URL` so rate limits are
+shared. Catalogue, knowledge, company profile and assistant settings are cached
+per process for 30–60 seconds; an edit is visible at once on the instance that
+saved it and within that time on the others.
 
 ---
 
-## 6. CI/CD (GitHub Actions outline)
+## 8. Go-live checklist
 
-`.github/workflows/deploy.yml`:
+**Content — before announcing the assistant**
 
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run typecheck
-      - run: npm run build
-      # Then: build & push a Docker image, or rsync + `docker compose up -d`,
-      # or SSH to the server and `git pull && docker compose up -d --build`.
-```
-
-Store secrets (`DATABASE_URL`, `ANTHROPIC_API_KEY`, SSH keys) in GitHub
-repository secrets — never in the workflow file.
-
----
-
-## 7. Go-live checklist
-
-**Content — do this before announcing the assistant**
-
-- [ ] In **Admin ▸ Chatbot Studio**, confirm Contact details, Business hours,
-      Teams (inboxes and lead owners), Pricing and Our work & results. The
-      assistant quotes only published prices and shows only entered work.
-- [ ] Review the website's service-card figures in `src/data/marketing/services.ts`
-      (the assistant no longer quotes them).
-- [ ] Set `CRON_SECRET` and schedule `/api/cron/follow-ups` every 15–30 minutes:
-      `*/15 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/follow-ups`
-- [ ] Walk the main WhatsApp paths in **Admin ▸ Chatbot Studio ▸ Simulator** —
-      Hi → menus, Get a Quote, "talk to a person", STOP — in English and Roman Urdu.
-- [ ] Walk the Knowledge Base module (`/admin/knowledge`) and confirm every
-      entry is accurate and `PUBLISHED`.
+- [ ] **Settings ▸ Company profile**: phone, WhatsApp number, email, address,
+      offices, hours, website and social links. Nothing is shown until entered.
+- [ ] **Catalogue**: products with confirmed specifications and availability,
+      published; categories reviewed; brands verified and activated only once
+      the partnership is confirmed.
+- [ ] **Knowledge Base**: every published entry is accurate; delete or archive
+      anything that is not.
+- [ ] **Chatbot Studio**: business hours, teams (inboxes and lead owners),
+      wording; pricing stays empty unless Pros-Link decides to publish prices.
+- [ ] **Team**: real staff accounts with the right roles.
+- [ ] **WhatsApp**: callback registered, test message answered, templates
+      synced (Admin ▸ WhatsApp ▸ Templates ▸ Sync).
+- [ ] `CRON_SECRET` set and `/api/cron/follow-ups` scheduled every 15–30 minutes:
+      `*/15 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://ai.pros-link.com/api/cron/follow-ups`
+- [ ] Walk the simulator (website and WhatsApp): Hi → menus, Products, Request a
+      Quote, Repair, Track My Request, "talk to a person", STOP — in English and
+      Roman Urdu.
 
 **Security**
 
-- [ ] `JWT_SECRET` is a fresh 48-byte random string.
-- [ ] Seeded accounts (`admin@bitsol.local`, `sales@bitsol.local`) have had
-      their passwords changed, or been replaced with real staff accounts.
-- [ ] Anyone still needing the console has a Marketing or unscoped account —
-      former BITSOL Institute accounts are refused at sign-in.
-- [ ] `REDIS_URL` is configured so rate limiting is actually enforced.
+- [ ] `JWT_SECRET` is a fresh random value; `.env` is not in the repository.
+- [ ] The seeded Super Admin's password has been changed after first sign-in,
+      or the account replaced.
 - [ ] TLS is live and HTTP redirects to HTTPS.
+- [ ] `REDIS_URL` set if more than one instance runs.
 
 **Smoke test**
 
-- [ ] `/chat` → the welcome screen shows the suggestions and the service rail.
-- [ ] Ask about a service → the answer comes from Marketing content, and any
-      price is one published in Chatbot Studio.
-- [ ] Ask about courses or admissions → the assistant says they aren't offered
-      and offers the services, without inventing details.
-- [ ] Submit a quote request; confirm the reference appears in `/admin/crm/leads`.
-- [ ] Ask to "talk to a human"; confirm a ticket appears in `/admin/support/tickets`.
-- [ ] `curl https://your-domain/api/health` returns `"status":"healthy"`.
+- [ ] `/chat` shows the Pros-Link welcome and the ten main-menu options.
+- [ ] A quote request through the assistant appears in Admin ▸ Quote Requests
+      and Leads, with a notification.
+- [ ] A repair request creates a ticket in Admin ▸ Service Tickets.
+- [ ] Tracking that ticket with its reference and phone number shows its status.
+- [ ] `curl https://ai.pros-link.com/api/health` returns `"status":"healthy"`.
 
 ---
 
-## 8. Backups & operations
+## 9. Operations
 
-- **Database backups:** schedule `pg_dump` (e.g. nightly) with off-site copies.
-  ```bash
-  docker compose exec db pg_dump -U bitsol bitsol_assistant > backup_$(date +%F).sql
-  ```
-- **Migrations:** always `prisma migrate deploy` (never `migrate dev`) in prod.
-- **Health monitoring:** poll `/api/health`; alert on `503`.
-- **Notification delivery:** the app queues rows in `notifications`. Run a worker
-  that reads `status = QUEUED` and delivers via SMTP/SMS/WhatsApp, or monitor the
-  queue depth at `/admin/notifications`.
-- **Log rotation:** ship container logs to your logging stack. Application audit
-  history lives in `system_logs` and is visible at `/admin/logs`.
-- **Zero-downtime updates:** rebuild `web` while `db`/`redis` keep running.
-
----
-
-<div align="center">
-Designed &amp; Developed by <b>BITSOL MARKETING</b> — https://bitsolmarketing.com
-</div>
+- **Backups:** nightly `pg_dump` with off-site copies; test a restore
+  periodically. Always back up before `migrate deploy`.
+- **Migrations:** `npx prisma migrate deploy` only — never `migrate dev` in
+  production.
+- **Health:** poll `/api/health`; alert on `503`.
+- **Audit:** Admin ▸ Audit Log (table `system_logs`) — every change with before
+  and after values, sign-ins and refused attempts.
+- **Email notifications:** new leads, quote requests and tickets queue rows in
+  `notifications` with `channel = EMAIL` and `status = QUEUED` for the team
+  inbox. **This app does not include a mail sender.** To deliver them, run a
+  small worker (or a scheduled job) that reads queued email rows, sends them
+  with the `SMTP_*` settings, and marks them `SENT` or `FAILED`. In-app
+  notifications (the bell) work without it.
+- **Logs:** ship process or container logs to your logging stack; WhatsApp send
+  failures are also recorded in the audit log (`whatsapp.send.failed`).
