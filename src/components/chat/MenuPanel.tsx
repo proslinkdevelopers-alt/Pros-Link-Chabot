@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, ChevronLeft, X } from "lucide-react";
 import { Logo } from "@/components/branding/Logo";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { MARKETING_MENU } from "@/data/marketing/menu";
 import type { MenuEntry } from "@/types";
 import { cn } from "@/lib/utils";
@@ -125,7 +125,7 @@ export function MenuPanel({
             </nav>
 
             <footer className="border-t border-white/[0.06] px-4 py-3 text-[11px] text-white/45">
-              {BRAND.contact.phone} · {BRAND.contact.email}
+              {BRAND.tagline}
             </footer>
           </motion.aside>
         </>

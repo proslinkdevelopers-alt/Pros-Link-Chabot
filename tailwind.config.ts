@@ -2,11 +2,10 @@ import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
 /**
- * BITSOL Marketing theme — bitsolmarketing.com's palette and Montserrat.
- * Semantic colours are CSS variables defined in globals.css (light on :root,
- * midnight under `.dark`), so shadcn/ui primitives follow whichever surface
- * they sit on. `brand.*` are the fixed brand colours for accents that must not
- * change between surfaces.
+ * Pros-Link theme. Semantic colours are CSS variables defined in globals.css
+ * (light on :root, navy under `.dark`), so the primitives follow whichever
+ * surface they sit on. `brand.*` are the fixed brand colours from
+ * `src/config/brand.ts`, for accents that must not change between surfaces.
  */
 const config: Config = {
   darkMode: ["class"],
@@ -18,7 +17,7 @@ const config: Config = {
   theme: {
     container: {
       center: true,
-      padding: "1.5rem",
+      padding: "1.25rem",
       screens: { "2xl": "1280px" },
     },
     extend: {
@@ -57,13 +56,17 @@ const config: Config = {
           foreground: "hsl(var(--popover-foreground))",
         },
         brand: {
-          ink: "#050816",
-          slate: "#0F172A",
-          cyan: "#00D9FF",
-          violet: "#7C3AED",
-          blue: "#2563EB",
-          pink: "#CF30AA",
-          muted: "#94A3B8",
+          ink: "#0A1628",
+          navy: "#12264A",
+          slate: "#1C2B45",
+          blue: "#1D5FE0",
+          sky: "#5AA2FF",
+          steel: "#8A9BB5",
+          surface: "#F5F7FB",
+        },
+        whatsapp: {
+          DEFAULT: "#25D366",
+          dark: "#128C7E",
         },
       },
       borderRadius: {
@@ -75,52 +78,32 @@ const config: Config = {
         sans: ["var(--font-sans)"],
       },
       letterSpacing: {
-        tightest: "-0.045em",
+        tightest: "-0.04em",
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(5, 8, 22, 0.04), 0 8px 28px -12px rgba(5, 8, 22, 0.14)",
-        elevated: "0 1px 2px rgba(5, 8, 22, 0.06), 0 24px 60px -24px rgba(5, 8, 22, 0.35)",
-        glow: "0 0 0 1px rgba(255,255,255,0.06), 0 30px 80px -30px rgba(124, 58, 237, 0.55)",
-        "glow-cyan": "0 0 24px rgba(0, 217, 255, 0.35)",
-        brand: "0 12px 32px -12px rgba(124, 58, 237, 0.65)",
+        soft: "0 1px 2px rgba(10, 22, 40, 0.05), 0 6px 20px -10px rgba(10, 22, 40, 0.12)",
+        elevated: "0 1px 2px rgba(10, 22, 40, 0.06), 0 20px 48px -20px rgba(10, 22, 40, 0.3)",
+        glow: "0 0 0 1px rgba(255,255,255,0.05), 0 28px 70px -30px rgba(10, 22, 40, 0.7)",
+        "glow-sky": "0 0 16px rgba(90, 162, 255, 0.45)",
+        brand: "0 8px 20px -10px rgba(29, 95, 224, 0.7)",
       },
       keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
         "fade-in-up": {
-          from: { opacity: "0", transform: "translateY(10px)" },
+          from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "typing-dot": {
           "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.4" },
-          "30%": { transform: "translateY(-4px)", opacity: "1" },
+          "30%": { transform: "translateY(-3px)", opacity: "1" },
         },
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
-        float: {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-12px)" },
-        },
-        marquee: {
-          from: { transform: "translateX(0)" },
-          to: { transform: "translateX(-50%)" },
-        },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in-up": "fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "fade-in-up": "fade-in-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both",
         "typing-dot": "typing-dot 1.2s infinite ease-in-out",
         shimmer: "shimmer 2s infinite",
-        float: "float 7s ease-in-out infinite",
-        marquee: "marquee 40s linear infinite",
       },
     },
   },

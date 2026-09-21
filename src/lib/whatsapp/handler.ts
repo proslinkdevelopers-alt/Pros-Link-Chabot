@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/redis";
 import { logEvent } from "@/lib/notify";
 import { shortId } from "@/lib/utils";
 import { detectLanguage, type Language } from "@/lib/i18n";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import type { ChatTurn } from "@/lib/ai";
 import { readCapture, saveTurn } from "@/lib/capture";
 import { getBotConfig } from "@/lib/bot/config";

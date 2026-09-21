@@ -1,5 +1,5 @@
 import type { KnowledgeEntry } from "@/types";
-import { BRAND as brand } from "@/lib/brands";
+import { BRAND as brand } from "@/config/brand";
 import { MARKETING_SERVICES } from "./services";
 
 /**
@@ -26,7 +26,7 @@ const COMPANY_ENTRIES: KnowledgeEntry[] = [
     kind: "ARTICLE",
     category: "About",
     question: "What is BITSOL Marketing and what do you do?",
-    answer: `${brand.description}\n\nWe work across four areas: **AI & Automation**, **WhatsApp Solutions**, **Digital Marketing & Growth** and **Websites & Software**. Practically, that means AI agents and chatbots, WhatsApp automation and our WhatBot Pro platform, lead generation, SEO and paid advertising, websites, mobile apps, CRM and custom software, UI/UX and branding. We are based in ${brand.contact.city} and serve businesses internationally.`,
+    answer: `${brand.description}\n\nWe work across four areas: **AI & Automation**, **WhatsApp Solutions**, **Digital Marketing & Growth** and **Websites & Software**. Practically, that means AI agents and chatbots, WhatsApp automation and our WhatBot Pro platform, lead generation, SEO and paid advertising, websites, mobile apps, CRM and custom software, UI/UX and branding. We are based in  and serve businesses internationally.`,
     keywords: ["about", "who are you", "company", "bitsol marketing", "what do you do", "introduction"],
   },
   {
@@ -87,7 +87,7 @@ const COMPANY_ENTRIES: KnowledgeEntry[] = [
     kind: "ARTICLE",
     category: "Consultation",
     question: "Can I book a consultation or meeting?",
-    answer: `Yes — the first consultation is free. Choose whichever suits you: **office visit** in ${brand.contact.city}, **Zoom**, **Google Meet** or a **WhatsApp call**. I'll take your name, phone, email, business name, preferred date and time, then confirm the booking with a reference number. Our office hours are ${brand.contact.hours}.`,
+    answer: `Yes — the first consultation is free. Choose whichever suits you: **office visit** in , **Zoom**, **Google Meet** or a **WhatsApp call**. I'll take your name, phone, email, business name, preferred date and time, then confirm the booking with a reference number. Our office hours are .`,
     keywords: ["meeting", "consultation", "book", "appointment", "call", "zoom", "google meet", "visit", "schedule"],
   },
   {
@@ -95,7 +95,7 @@ const COMPANY_ENTRIES: KnowledgeEntry[] = [
     kind: "ARTICLE",
     category: "Contact",
     question: "How do I contact BITSOL Marketing?",
-    answer: `**WhatsApp:** ${brand.contact.whatsapp}\n**Phone:** ${brand.contact.phone}\n**Email:** ${brand.contact.email}\n**Office:** ${brand.contact.address}, ${brand.contact.city}\n**Hours:** ${brand.contact.hours}\n**Website:** ${brand.contact.website}\n\nYou can also carry on right here — I can capture your requirement, book a meeting or raise a support ticket without you needing to call.`,
+    answer: `**WhatsApp:** \n**Phone:** \n**Email:** \n**Office:** , \n**Hours:** \n**Website:** \n\nYou can also carry on right here — I can capture your requirement, book a meeting or raise a support ticket without you needing to call.`,
     keywords: ["contact", "phone", "number", "email", "address", "location", "office", "reach", "call", "whatsapp"],
   },
   {

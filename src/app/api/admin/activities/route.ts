@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canAccessAdmin } from "@/lib/auth";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { isOwn } from "@/lib/admin/queries";
 
 export const runtime = "nodejs";

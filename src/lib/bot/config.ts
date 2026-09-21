@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { logEvent } from "@/lib/notify";
 import { DEFAULT_BOT_CONFIG } from "@/data/marketing/bot";
 import {

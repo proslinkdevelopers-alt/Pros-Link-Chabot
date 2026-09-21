@@ -19,7 +19,7 @@ import { MenuPanel } from "./MenuPanel";
 import { ChatInput } from "./ChatInput";
 import { LogoMark } from "@/components/branding/Logo";
 import { Button } from "@/components/ui/button";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { MARKETING_QUICK_REPLIES } from "@/data/marketing/menu";
 import { MARKETING_SERVICES } from "@/data/marketing/services";
 import { detectLanguage, speechTagFor, t, type Language } from "@/lib/i18n";
@@ -323,19 +323,6 @@ export function ChatWindow() {
 
         <div className="mt-auto border-t border-white/[0.06] p-5 text-[12px] text-white/55">
           <p className="font-semibold text-white/80">Prefer to speak to us?</p>
-          <a
-            href={`tel:${BRAND.contact.phone.replace(/\s/g, "")}`}
-            className="mt-2 flex items-center gap-2 hover:text-brand-cyan"
-          >
-            <Phone className="size-3.5" /> {BRAND.contact.phone}
-          </a>
-          <a
-            href={`mailto:${BRAND.contact.email}`}
-            className="mt-1.5 flex items-center gap-2 break-all hover:text-brand-cyan"
-          >
-            <Mail className="size-3.5" /> {BRAND.contact.email}
-          </a>
-          <p className="mt-2 text-[11px] text-white/35">{BRAND.contact.hours}</p>
         </div>
       </aside>
 

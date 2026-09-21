@@ -145,12 +145,12 @@ const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use 24-hour HH:MM");
 export const sectionSchemas = {
   contact: z.object({
     /** The WhatsApp Business number the assistant runs on — share it in wa.me links, QR codes and ads. */
-    whatsappCta: text,
-    businessPhone: text,
-    email: text,
-    website: z.string().url(),
-    whatbotUrl: z.string().url(),
-    address: text,
+    whatsappCta: z.string(),
+    businessPhone: z.string(),
+    email: z.string(),
+    website: z.string(),
+    whatbotUrl: z.string(),
+    address: z.string(),
     hours: localized,
   }),
 

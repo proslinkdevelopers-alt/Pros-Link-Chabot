@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { MARKETING_SERVICES, findService, matchService } from "@/data/marketing/services";
 import { BOT_INTENTS } from "@/lib/bot/types";
 import { getProvider } from "./provider";
@@ -300,11 +300,11 @@ function parseJsonObject(raw: string): Record<string, unknown> {
 
 // ------------------------------------------------------------ Validation ----
 
-const BRAND_EMAIL = BRAND.contact.email.toLowerCase();
+const BRAND_EMAIL = "";
 
 /** Last ten digits of every number that belongs to BITSOL, never to a customer. */
 function brandTails(extra: string[] = []): string[] {
-  return [BRAND.contact.phone, BRAND.contact.whatsapp, ...extra]
+  return [...extra]
     .map((phone) => phone.replace(/\D/g, "").slice(-10))
     .filter((tail) => tail.length === 10);
 }

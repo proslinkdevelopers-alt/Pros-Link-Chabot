@@ -1,42 +1,31 @@
-import { BRAND } from "@/lib/brands";
-import { MARKETING_SERVICES } from "@/data/marketing/services";
+import { BRAND } from "@/config/brand";
 import { SITE_URL, absoluteUrl } from "@/lib/site";
 
 /**
- * llms.txt: a plain-text summary for AI assistants and AI search engines, built
- * from the same service catalogue the concierge answers from, so it never
- * drifts from what the site says.
+ * llms.txt: a plain-text summary for AI assistants and AI search engines.
+ * Contact details are deliberately absent — they live in the database and
+ * change without a deploy; the pages linked below carry them.
  */
 export const dynamic = "force-static";
 
 export function GET() {
-  const services = MARKETING_SERVICES.map(
-    (s) => `- ${s.name} (${s.group}): ${s.tagline} ${s.pricing.startingAt}, ${s.pricing.model}.`,
-  ).join("\n");
+  const body = `# ${BRAND.name}
 
-  const body = `# ${BRAND.name} AI Concierge
+> ${BRAND.description}
 
-> ${BRAND.description} This site (${SITE_URL}) hosts the company's AI concierge, which answers questions, gives indicative pricing, files quote requests and books consultations 24/7 in English, Urdu, Roman Urdu and Punjabi.
+${BRAND.name} — ${BRAND.tagline}. This site (${SITE_URL}) hosts the ${BRAND.assistant.name}, which helps customers explore products, request quotations, arrange installation, maintenance and repair, register support requests and track them, in English, Urdu and Roman Urdu.
 
-The company's main website is ${BRAND.contact.website}.
+## What ${BRAND.name} offers
+
+${BRAND.businessAreas.map((area) => `- ${area}`).join("\n")}
 
 ## Pages
 
-- [Home](${absoluteUrl("/")}): Services, how an engagement runs, and the BITSOL standard.
-- [AI Concierge](${absoluteUrl("/chat")}): Chat with the assistant for answers, quotes and consultations.
-- [About](${absoluteUrl("/about")}): What the concierge does and how it works.
+- [Home](${absoluteUrl("/")}): Products, services and how to reach the team.
+- [${BRAND.assistant.name}](${absoluteUrl("/chat")}): Quotes, service requests, support and request tracking.
+- [About](${absoluteUrl("/about")}): About ${BRAND.name}.
 
-## Services
-
-${services}
-
-Prices are indicative starting points. Every engagement receives a written, fixed quotation.
-
-## Contact
-
-- Email: ${BRAND.contact.email}
-- Phone and WhatsApp: ${BRAND.contact.phone}
-- Website: ${BRAND.contact.website}
+Product specifications, prices and availability are confirmed by the ${BRAND.name} team; the assistant does not quote them unless the team has published them.
 `;
 
   return new Response(body, {

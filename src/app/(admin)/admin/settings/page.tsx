@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
 import { Callout, DbNotice, EmptyState, PageHeader } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { formatDateTime, humanise } from "@/lib/utils";
 
 export const metadata = { title: "Settings" };
@@ -40,17 +40,11 @@ export default async function SettingsPage() {
 
         <dl className="mt-6 grid gap-x-8 gap-y-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
           <Row label="Reference prefix" value={BRAND.referencePrefix} />
-          <Row label="Phone" value={BRAND.contact.phone} />
-          <Row label="WhatsApp" value={BRAND.contact.whatsapp} />
-          <Row label="Email" value={BRAND.contact.email} />
-          <Row label="Address" value={BRAND.contact.address} />
-          <Row label="Hours" value={BRAND.contact.hours} />
-          <Row label="Website" value={BRAND.contact.website} />
         </dl>
       </Card>
 
       <Callout title="Where these values come from">
-        These are the defaults in <code>src/lib/brands.ts</code>. The WhatsApp assistant and the
+        These are the defaults in <code>src/config/brand.ts</code>. The WhatsApp assistant and the
         website chat use the contact details, hours and prices from{" "}
         <a href="/admin/chatbot/contact" className="font-semibold text-primary hover:underline">
           Chatbot Studio

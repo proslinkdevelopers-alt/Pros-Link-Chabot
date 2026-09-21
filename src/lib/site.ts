@@ -1,41 +1,25 @@
-import { BRAND } from "@/lib/brands";
-import { MARKETING_SERVICES } from "@/data/marketing/services";
+import { BRAND } from "@/config/brand";
+import type { CompanyProfile } from "@/lib/company-schema";
 
 /**
  * Public, canonical identity of this site for search engines.
  *
- * Canonical URLs, the sitemap, robots.txt and structured data all need one
- * absolute origin. `NEXT_PUBLIC_APP_URL` wins when it is set to a real host; a
- * missing or localhost value falls back to production, so a host that forgot
- * the variable never publishes `http://localhost:3000` as its canonical URL.
+ * Canonical URLs, the sitemap, robots.txt and structured data need one absolute
+ * origin, and it comes only from `NEXT_PUBLIC_APP_URL`. There is no hard-coded
+ * production domain to fall back to — set the variable on every deployment.
  */
-const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim();
 
-export const SITE_URL = (
-  envUrl && !/localhost|127\.0\.0\.1/.test(envUrl) ? envUrl : "https://ai.bitsolmarketing.com"
-).replace(/\/$/, "");
+export const SITE_URL = (envUrl || "http://localhost:3000").replace(/\/$/, "");
 
 export const absoluteUrl = (path = "/") => `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 
-/**
- * The company itself is described once, on bitsolmarketing.com. This site
- * references that record by `@id` instead of repeating address, phone and hours,
- * so the two sites can never publish conflicting business details.
- */
-export const ORGANIZATION_ID = "https://bitsolmarketing.com/#organization";
-
-export const SAME_AS = [
-  "https://bitsolmarketing.com",
-  "https://www.facebook.com/bitsolmarketing/",
-  "https://www.linkedin.com/company/bitsolpvtltd/",
-  "https://www.instagram.com/bitsol_marketing/",
-];
+export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 
 export const SEO = {
-  homeTitle: "AI Chatbots, WhatsApp Automation & AI Agents | BITSOL Marketing",
-  homeDescription:
-    "Talk to BITSOL Marketing's AI concierge 24/7 for AI chatbots, WhatsApp automation, AI agents, websites and digital marketing. Free quotes and consultations.",
-  ogAlt: `${BRAND.name} AI concierge: AI chatbots, WhatsApp automation and AI agents`,
+  homeTitle: BRAND.seo.title,
+  homeDescription: BRAND.seo.description,
+  ogAlt: `${BRAND.name} — ${BRAND.tagline}`,
 };
 
 /**
@@ -51,75 +35,51 @@ export const PUBLIC_ROUTES = [
   { path: "/about", changeFrequency: "monthly", priority: 0.7 },
 ] as const;
 
-/** Organization reference plus the fields that are true on both sites. */
-export const organizationRef = {
-  "@type": "Organization",
-  "@id": ORGANIZATION_ID,
-  name: BRAND.name,
-  url: BRAND.contact.website,
-  email: BRAND.contact.email,
-  sameAs: SAME_AS,
-};
+/** The organisation, with only the contact details staff have entered. */
+export function organizationJsonLd(company: CompanyProfile) {
+  const sameAs = Object.values(company.social).filter(Boolean);
+  return {
+    "@type": "Organization",
+    "@id": ORGANIZATION_ID,
+    name: BRAND.name,
+    slogan: BRAND.tagline,
+    description: BRAND.description,
+    url: company.website || SITE_URL,
+    ...(company.logoUrl || BRAND.logoUrl ? { logo: absoluteMaybe(company.logoUrl || BRAND.logoUrl!) } : {}),
+    ...(company.email ? { email: company.email } : {}),
+    ...(company.phone ? { telephone: company.phone } : {}),
+    ...(company.address ? { address: { "@type": "PostalAddress", streetAddress: company.address, addressCountry: "PK" } } : {}),
+    areaServed: { "@type": "Country", name: BRAND.serviceArea },
+    knowsAbout: BRAND.businessAreas,
+    ...(sameAs.length ? { sameAs } : {}),
+  };
+}
 
 export function websiteJsonLd() {
   return {
     "@type": "WebSite",
     "@id": `${SITE_URL}/#website`,
     url: SITE_URL,
-    name: `${BRAND.name} AI Concierge`,
+    name: BRAND.name,
     description: SEO.homeDescription,
     inLanguage: ["en", "ur"],
     publisher: { "@id": ORGANIZATION_ID },
   };
 }
 
-export function conciergeJsonLd() {
+export function assistantJsonLd() {
   return {
     "@type": "WebApplication",
     "@id": `${SITE_URL}/chat#app`,
-    name: `${BRAND.name} AI Concierge`,
+    name: BRAND.assistant.name,
     url: absoluteUrl("/chat"),
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     browserRequirements: "Requires JavaScript",
-    availableLanguage: ["English", "Urdu", "Roman Urdu", "Punjabi"],
-    description:
-      "An AI assistant that answers questions about BITSOL Marketing's services, gives indicative pricing, files quote requests and books consultations, 24/7.",
+    availableLanguage: ["English", "Urdu", "Roman Urdu"],
+    description: `${BRAND.assistant.name} helps you explore office equipment, request a quote, arrange installation, maintenance or repair, and reach the ${BRAND.name} team.`,
     offers: { "@type": "Offer", price: "0", priceCurrency: "PKR" },
     provider: { "@id": ORGANIZATION_ID },
-  };
-}
-
-/** The service catalogue, with the indicative starting price where it is numeric. */
-export function serviceCatalogJsonLd() {
-  return {
-    "@type": "OfferCatalog",
-    "@id": `${SITE_URL}/#services`,
-    name: `${BRAND.name} services`,
-    itemListElement: MARKETING_SERVICES.map((service, index) => {
-      const amount = service.pricing.startingAt.match(/[\d,]+/)?.[0]?.replace(/,/g, "");
-      return {
-        "@type": "Offer",
-        position: index + 1,
-        itemOffered: {
-          "@type": "Service",
-          name: service.name,
-          serviceType: service.group,
-          description: service.overview,
-          provider: { "@id": ORGANIZATION_ID },
-          areaServed: { "@type": "Country", name: "Pakistan" },
-        },
-        ...(amount
-          ? {
-              priceSpecification: {
-                "@type": "PriceSpecification",
-                minPrice: Number(amount),
-                priceCurrency: "PKR",
-              },
-            }
-          : {}),
-      };
-    }),
   };
 }
 
@@ -133,4 +93,8 @@ export function breadcrumbJsonLd(items: { name: string; path: string }[]) {
       item: absoluteUrl(item.path),
     })),
   };
+}
+
+function absoluteMaybe(value: string): string {
+  return /^https?:\/\//.test(value) ? value : absoluteUrl(value);
 }

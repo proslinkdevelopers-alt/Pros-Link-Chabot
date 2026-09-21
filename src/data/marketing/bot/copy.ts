@@ -1,4 +1,4 @@
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import type { BotConfig } from "@/lib/bot/schema";
 
 /**
@@ -19,12 +19,12 @@ import type { BotConfig } from "@/lib/bot/schema";
  */
 
 export const DEFAULT_CONTACT: BotConfig["contact"] = {
-  whatsappCta: BRAND.contact.whatsapp,
-  businessPhone: BRAND.contact.phone,
-  email: BRAND.contact.email,
-  website: BRAND.contact.website,
-  whatbotUrl: "https://whatbot.bitsolmarketing.com/",
-  address: `${BRAND.contact.address}, ${BRAND.contact.city}`,
+  whatsappCta: "",
+  businessPhone: "",
+  email: "",
+  website: "",
+  whatbotUrl: "",
+  address: "",
   hours: {
     en: "Monday–Saturday, 10:00 AM – 7:00 PM (PKT)",
     ur_roman: "Somvaar se Hafta, 10:00 AM – 7:00 PM (PKT)",

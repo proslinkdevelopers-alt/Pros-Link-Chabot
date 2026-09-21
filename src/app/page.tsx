@@ -2,32 +2,30 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import {
   ArrowRight,
-  ArrowUpRight,
-  CalendarCheck,
-  CheckCircle2,
-  FileText,
-  Languages,
-  LifeBuoy,
+  BadgeCheck,
+  ClipboardList,
+  Headset,
   Mail,
-  MessageCircle,
+  MapPin,
+  MessageSquareText,
   Phone,
-  ShieldCheck,
-  Sparkles,
+  Search,
+  Truck,
+  UserRound,
+  Wrench,
 } from "lucide-react";
-import { SplashScreen } from "@/components/splash/SplashScreen";
 import { SiteHeader } from "@/components/branding/SiteHeader";
 import { Footer } from "@/components/branding/Footer";
 import { LogoMark } from "@/components/branding/Logo";
-import { BRAND } from "@/lib/brands";
-import { MARKETING_SERVICES } from "@/data/marketing/services";
+import { WhatsAppIcon } from "@/components/branding/WhatsAppIcon";
+import { CategoryIcon } from "@/components/catalog/CategoryIcon";
 import { JsonLd } from "@/components/seo/JsonLd";
-import {
-  SEO,
-  conciergeJsonLd,
-  organizationRef,
-  serviceCatalogJsonLd,
-  websiteJsonLd,
-} from "@/lib/site";
+import { BRAND } from "@/config/brand";
+import { SERVICES } from "@/data/catalog";
+import { listCategories, verifiedBrands } from "@/lib/catalog";
+import { getCompanyProfile, digits, hasContact, whatsappLink } from "@/lib/company";
+import { categoryHref, chatHref, type ChatStart } from "@/lib/chat-start";
+import { SEO, assistantJsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: { absolute: SEO.homeTitle },
@@ -36,412 +34,351 @@ export const metadata: Metadata = {
   openGraph: { url: "/", title: SEO.homeTitle, description: SEO.homeDescription },
 };
 
-/** Facts, not flourishes — every figure here is true of the product today. */
-const PROOF = [
-  { value: `${MARKETING_SERVICES.length}`, label: "Disciplines under one roof" },
-  { value: "24/7", label: "AI concierge, never offline" },
-  { value: "4", label: "Languages spoken fluently" },
-  { value: "100%", label: "Ownership handed to you" },
-];
+/** Contact details and the catalogue are read at request time, so edits in the console show at once. */
+export const dynamic = "force-dynamic";
 
-const STANDARD = [
+/** Only what Pros-Link has said about itself. */
+const REASONS = [
   {
-    title: "We build and we market",
-    body: "Most agencies do one or the other. We design your brand, engineer the software and run the campaigns that fill it — so nothing falls between vendors.",
+    icon: Truck,
+    title: "Nationwide presence",
+    body: `Sales and distribution across ${BRAND.serviceArea}, so equipment and supplies reach you where you work.`,
   },
   {
-    title: "AI is our core, not an add-on",
-    body: "We ship production AI systems. Automation advice comes from delivery experience, not a sales deck.",
+    icon: Wrench,
+    title: "After-sales support",
+    body: "Installation, maintenance, repair and technical support after the sale — not just the machine.",
   },
   {
-    title: "You own everything",
-    body: "Source code, design files, ad accounts and data are yours — created in your name from day one, transferred in full at handover.",
+    icon: ClipboardList,
+    title: "One partner, end to end",
+    body: "Equipment, consumables, parts and service from a single team that knows your setup.",
   },
   {
-    title: "We report honestly",
-    body: "Clear numbers, plain language and trade-offs explained — including when something isn't working and what we'll change.",
+    icon: BadgeCheck,
+    title: "Built for businesses",
+    body: `Office equipment and office solutions for businesses across ${BRAND.serviceArea}.`,
   },
 ];
 
-const PROCESS = [
-  { title: "Discovery call", body: "A free 30-minute conversation about your goal, current setup and constraints." },
-  { title: "Proposal & quote", body: "Scope, deliverables, timeline and a fixed price — usually within 2–3 working days." },
-  { title: "Kickoff", body: "Milestones agreed, project channel opened and a named point of contact assigned." },
-  { title: "Delivery in milestones", body: "You review and approve at every stage, not just at the end." },
-  { title: "Launch & handover", body: "Files, access, training and documentation transferred to you." },
-  { title: "Ongoing partnership", body: "Optional care plans and retainers to keep compounding results." },
+const STEPS = [
+  {
+    icon: MessageSquareText,
+    title: "Tell us what you need",
+    body: "A product, a quotation, a repair or a question — in English, Urdu or Roman Urdu.",
+  },
+  {
+    icon: ClipboardList,
+    title: "Get a reference number",
+    body: "Quote requests and service tickets are logged straight into our system with a reference you can track.",
+  },
+  {
+    icon: UserRound,
+    title: "Our team follows up",
+    body: "The right person — sales or a technician — picks it up with everything you've already told us.",
+  },
 ];
 
-const CONCIERGE = [
-  { icon: FileText, title: "Quotes, not guesswork", body: "Scopes your project and files a quote request with a reference number." },
-  { icon: CalendarCheck, title: "Consultations booked", body: "Office, Zoom, Google Meet or WhatsApp — confirmed by our team." },
-  { icon: LifeBuoy, title: "Support, tracked", body: "Existing clients raise tickets that route straight to the right people." },
-  { icon: Languages, title: "Fluent in four languages", body: "English, Urdu, Roman Urdu and Punjabi — it mirrors how you write." },
-];
+export default async function HomePage() {
+  const [company, categories, brands] = await Promise.all([getCompanyProfile(), listCategories(), verifiedBrands()]);
+  const wa = whatsappLink(company, `Hello ${BRAND.name}`);
 
-export default function HomePage() {
   return (
     <>
-      <JsonLd
-        graph={[
-          { ...organizationRef, hasOfferCatalog: { "@id": serviceCatalogJsonLd()["@id"] } },
-          websiteJsonLd(),
-          conciergeJsonLd(),
-          serviceCatalogJsonLd(),
-        ]}
-      />
-      <SplashScreen />
+      <JsonLd graph={[organizationJsonLd(company), websiteJsonLd(), assistantJsonLd()]} />
 
-      <div className="dark min-h-dvh bg-background text-foreground">
-        <SiteHeader />
+      <div className="min-h-dvh bg-background">
+        <SiteHeader whatsappUrl={wa} logoUrl={company.logoUrl || undefined} />
 
         <main>
           {/* ------------------------------------------------------------ Hero */}
-          <section className="brand-gradient relative overflow-hidden">
+          <section className="dark brand-gradient relative overflow-hidden text-foreground">
             <div className="bg-grid pointer-events-none absolute inset-0" aria-hidden />
-            <div className="container relative grid items-center gap-14 pb-24 pt-16 md:pt-24 lg:grid-cols-[1.15fr_1fr] lg:pb-32">
-              <div className="animate-fade-in-up">
-                <p className="eyebrow">{BRAND.name} · AI-first growth partner</p>
-                <h1 className="mt-6 text-balance text-[2.6rem] font-extrabold leading-[1.05] tracking-tightest text-white sm:text-6xl lg:text-[4.25rem]">
-                  Growth, engineered with{" "}
-                  <span className="text-gradient">artificial intelligence.</span>
+            <div className="container relative grid items-center gap-12 pb-20 pt-14 md:pt-20 lg:grid-cols-[1.1fr_1fr] lg:pb-24">
+              <div>
+                <p className="eyebrow text-white/60">Office equipment · Supplies · Service</p>
+                <h1 className="mt-5 text-balance text-4xl font-extrabold leading-[1.08] tracking-tightest text-white sm:text-5xl lg:text-[3.6rem]">
+                  Your trusted <span className="text-gradient">office solutions</span> partner.
                 </h1>
-                <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-white/65">
-                  We design, build and market the systems that grow ambitious businesses — AI
-                  chatbots and agents, WhatsApp automation, software, and brands people remember.
-                </p>
+                <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-white/70">{BRAND.description}</p>
 
-                <div className="mt-9 flex flex-wrap items-center gap-3">
+                <div className="mt-8 flex flex-wrap items-center gap-3">
                   <Link
-                    href="/chat"
-                    className="group inline-flex h-12 items-center gap-2 rounded-full bg-brand px-7 text-[15px] font-semibold text-white shadow-brand transition hover:brightness-110"
+                    href={chatHref("products")}
+                    className="inline-flex h-11 items-center gap-2 rounded-lg bg-brand px-5 text-[15px] font-semibold text-white shadow-brand transition hover:brightness-110"
                   >
-                    <Sparkles className="size-4" /> Speak with our AI concierge
+                    <Search className="size-4" /> Explore products
                   </Link>
                   <Link
-                    href="#services"
-                    className="inline-flex h-12 items-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-7 text-[15px] font-semibold text-white/90 transition hover:border-white/30 hover:bg-white/[0.07]"
+                    href={chatHref("quote")}
+                    className="inline-flex h-11 items-center gap-2 rounded-lg border border-white/20 bg-white/[0.04] px-5 text-[15px] font-semibold text-white transition hover:border-white/35 hover:bg-white/[0.08]"
                   >
-                    Explore services
+                    Request a quote
+                  </Link>
+                  <Link
+                    href={chatHref("service")}
+                    className="inline-flex h-11 items-center gap-2 px-2 text-[15px] font-semibold text-white/80 transition hover:text-white"
+                  >
+                    Service &amp; repair <ArrowRight className="size-4" />
                   </Link>
                 </div>
 
-                <dl className="mt-14 grid max-w-xl grid-cols-2 gap-x-8 gap-y-6 border-t border-white/[0.08] pt-8 sm:grid-cols-4">
-                  {PROOF.map((item) => (
-                    <div key={item.label}>
-                      <dt className="sr-only">{item.label}</dt>
-                      <dd className="text-3xl font-bold tracking-tight text-white">{item.value}</dd>
-                      <p className="mt-1 text-[11px] leading-snug text-white/45">{item.label}</p>
-                    </div>
-                  ))}
-                </dl>
+                <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/[0.08] pt-6 text-[13px] text-white/60">
+                  <li className="inline-flex items-center gap-2"><BadgeCheck className="size-4 text-brand-sky" /> Sales &amp; distribution nationwide</li>
+                  <li className="inline-flex items-center gap-2"><BadgeCheck className="size-4 text-brand-sky" /> After-sales support</li>
+                  <li className="inline-flex items-center gap-2"><BadgeCheck className="size-4 text-brand-sky" /> Service requests you can track</li>
+                </ul>
               </div>
 
-              <ConciergePreview />
+              <AssistantPreview />
             </div>
           </section>
 
-          {/* --------------------------------------------------------- Marquee */}
-          <div className="relative overflow-hidden border-y border-white/[0.06] bg-white/[0.015] py-5">
-            <div className="flex w-max animate-marquee gap-10 whitespace-nowrap pr-10">
-              {[...MARKETING_SERVICES, ...MARKETING_SERVICES].map((service, index) => (
-                <span
-                  key={`${service.slug}-${index}`}
-                  className="inline-flex items-center gap-10 text-sm font-semibold uppercase tracking-[0.2em] text-white/35"
+          {/* -------------------------------------------------------- Products */}
+          <section id="products" className="scroll-mt-20 py-20">
+            <div className="container">
+              <SectionHeading
+                eyebrow="Products"
+                title="Equipment and supplies for the working office"
+                body="Choose a category to see what we carry, ask a question or request a quotation. The assistant shares the current range and specifications our team has published."
+              />
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {categories.map((category) => (
+                  <Link
+                    key={category.slug}
+                    href={categoryHref(category.slug)}
+                    className="group flex flex-col rounded-xl border bg-card p-5 shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-elevated"
+                  >
+                    <span className="grid size-11 place-items-center rounded-lg bg-primary/[0.08] text-primary ring-1 ring-inset ring-primary/10">
+                      <CategoryIcon name={category.icon} className="size-5" />
+                    </span>
+                    <h3 className="mt-4 text-[15px] font-semibold">{category.name}</h3>
+                    {category.description && (
+                      <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">{category.description}</p>
+                    )}
+                    <span className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary">
+                      View range <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </Link>
+                ))}
+                <Link
+                  href={chatHref("quote")}
+                  className="flex flex-col justify-between rounded-xl border border-dashed border-primary/30 bg-primary/[0.03] p-5 transition hover:bg-primary/[0.06]"
                 >
-                  {service.name}
-                  <span className="size-1 rounded-full bg-brand-cyan/70" aria-hidden />
-                </span>
-              ))}
+                  <div>
+                    <h3 className="text-[15px] font-semibold">Not sure what you need?</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                      Tell us about your office and our team will recommend the right equipment.
+                    </p>
+                  </div>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary">
+                    Ask for a recommendation <ArrowRight className="size-3.5" />
+                  </span>
+                </Link>
+              </div>
+
+              {brands.length > 0 && (
+                <div className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-3 border-t pt-8">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Brands we carry</p>
+                  {brands.map((brand) => (
+                    <span key={brand} className="text-base font-bold tracking-tight text-foreground/70">
+                      {brand}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-background to-transparent" />
-          </div>
+          </section>
 
           {/* -------------------------------------------------------- Services */}
-          <section id="services" className="container scroll-mt-24 py-24 md:py-32">
-            <SectionHeading
-              eyebrow="What we do"
-              title={
-                <>
-                  {MARKETING_SERVICES.length} disciplines.{" "}
-                  <span className="text-white/45">One accountable partner.</span>
-                </>
-              }
-              body="From the first automation to the full brand system, every engagement is run by one team that answers for the outcome."
-            />
-
-            <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {MARKETING_SERVICES.map((service) => (
-                <Link
-                  key={service.slug}
-                  href="/chat"
-                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.025] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-brand-cyan/30 hover:bg-white/[0.045] hover:shadow-glow"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-cyan/80">
-                      {service.group}
-                    </span>
-                    <ArrowUpRight className="size-4 text-white/25 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" />
-                  </div>
-                  <h3 className="mt-4 text-xl font-bold tracking-tight text-white">{service.name}</h3>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-white/55">{service.tagline}</p>
-                  <p className="mt-6 border-t border-white/[0.06] pt-4 text-xs text-white/40">
-                    <span className="font-semibold text-white/80">{service.pricing.startingAt}</span>{" "}
-                    · {service.pricing.model}
-                  </p>
-                </Link>
-              ))}
-
-              <Link
-                href="/chat"
-                className="ring-gradient group relative flex flex-col justify-between gap-6 overflow-hidden rounded-2xl bg-gradient-to-r from-brand-blue/20 via-brand-violet/15 to-transparent p-7 transition hover:-translate-y-1 sm:col-span-2 md:flex-row md:items-center lg:col-span-3"
-              >
-                <div>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                    Not sure where to start?
-                  </span>
-                  <h3 className="mt-3 text-2xl font-bold tracking-tight text-white">
-                    Describe the goal. We&apos;ll recommend the route.
-                  </h3>
-                </div>
-                <span className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-full bg-white px-6 text-sm font-semibold text-brand-ink md:self-auto">
-                  Ask the concierge
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                </span>
-              </Link>
-            </div>
-
-            <p className="mt-6 text-center text-[11px] text-white/35">
-              Prices are indicative starting points. Every engagement receives a written, fixed
-              quotation.
-            </p>
-          </section>
-
-          {/* -------------------------------------------------------- Standard */}
-          <section id="standard" className="scroll-mt-24 border-y border-white/[0.06] bg-white/[0.015]">
-            <div className="container grid gap-14 py-24 md:py-32 lg:grid-cols-[1fr_1.4fr]">
+          <section id="services" className="scroll-mt-20 border-y bg-card py-20">
+            <div className="container">
               <SectionHeading
-                align="left"
-                eyebrow="The BITSOL standard"
-                title={
-                  <>
-                    Held to the standard of a firm{" "}
-                    <span className="text-gradient">many times our size.</span>
-                  </>
-                }
-                body="Four commitments shape every engagement — and they're written into how we work, not just how we pitch."
+                eyebrow="Services"
+                title="Installation, maintenance and repair"
+                body="Every service request becomes a ticket with a reference number, so you always know where it stands."
               />
-
-              <ol className="grid gap-px overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.07] sm:grid-cols-2">
-                {STANDARD.map((item, index) => (
-                  <li key={item.title} className="bg-background p-7">
-                    <span className="font-mono text-xs font-semibold text-brand-cyan">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <h3 className="mt-4 text-lg font-bold tracking-tight text-white">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-white/55">{item.body}</p>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </section>
-
-          {/* --------------------------------------------------------- Process */}
-          <section id="process" className="container scroll-mt-24 py-24 md:py-32">
-            <SectionHeading
-              eyebrow="How an engagement runs"
-              title={
-                <>
-                  A clear path from first call{" "}
-                  <span className="text-white/45">to compounding results.</span>
-                </>
-              }
-            />
-
-            <ol className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {PROCESS.map((step, index) => (
-                <li
-                  key={step.title}
-                  className="relative rounded-2xl border border-white/[0.07] bg-white/[0.02] p-6"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-9 place-items-center rounded-full bg-brand text-sm font-bold text-white shadow-brand">
-                      {index + 1}
-                    </span>
-                    <h3 className="text-base font-bold tracking-tight text-white">{step.title}</h3>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-white/55">{step.body}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          {/* ------------------------------------------------------- Concierge */}
-          <section className="border-t border-white/[0.06] bg-white/[0.015]">
-            <div className="container grid items-center gap-14 py-24 md:py-32 lg:grid-cols-2">
-              <div>
-                <SectionHeading
-                  align="left"
-                  eyebrow="The AI concierge"
-                  title={
-                    <>
-                      Your first meeting with BITSOL{" "}
-                      <span className="text-gradient">can happen right now.</span>
-                    </>
-                  }
-                  body="Our concierge answers from BITSOL's own knowledge — services, process and indicative pricing — and turns a conversation into action, day or night."
-                />
-                <Link
-                  href="/chat"
-                  className="group mt-8 inline-flex h-12 items-center gap-2 rounded-full bg-brand px-7 text-[15px] font-semibold text-white shadow-brand transition hover:brightness-110"
-                >
-                  Start a conversation
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                {CONCIERGE.map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-2xl border border-white/[0.07] bg-background/60 p-6 transition hover:border-white/15"
-                  >
-                    <span className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-brand-blue/25 to-brand-violet/25 text-brand-cyan ring-1 ring-inset ring-white/10">
-                      <item.icon className="size-5" />
-                    </span>
-                    <h3 className="mt-5 text-base font-bold tracking-tight text-white">{item.title}</h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-white/55">{item.body}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ------------------------------------------------------------- CTA */}
-          <section className="container py-24 md:py-32">
-            <div className="ring-gradient relative overflow-hidden rounded-[2rem] bg-brand-slate/60 px-6 py-16 text-center sm:px-12 md:py-20">
-              <div className="brand-gradient pointer-events-none absolute inset-0 opacity-70" aria-hidden />
-              <div className="bg-grid pointer-events-none absolute inset-0" aria-hidden />
-              <div className="relative mx-auto max-w-3xl">
-                <p className="eyebrow justify-center">Begin</p>
-                <h2 className="mt-5 text-balance text-4xl font-extrabold leading-tight tracking-tightest text-white md:text-5xl">
-                  Your next stage of growth starts with one conversation.
-                </h2>
-                <p className="mx-auto mt-5 max-w-xl text-white/60">
-                  Tell us where you want to be. We&apos;ll show you the fastest credible way to get
-                  there — with a fixed quotation, not a vague estimate.
-                </p>
-                <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {SERVICES.map((service) => (
                   <Link
-                    href="/chat"
-                    className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 text-[15px] font-semibold text-brand-ink transition hover:bg-white/90"
+                    key={service.key}
+                    href={chatHref(service.start as ChatStart)}
+                    className="group flex gap-4 rounded-xl border bg-background p-5 transition hover:border-primary/30 hover:bg-card hover:shadow-soft"
                   >
-                    <MessageCircle className="size-4" /> Talk to the concierge
+                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand-ink text-white">
+                      <CategoryIcon name={service.icon} className="size-[18px]" />
+                    </span>
+                    <div>
+                      <h3 className="text-[15px] font-semibold">{service.name}</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{service.description}</p>
+                    </div>
                   </Link>
-                  <a
-                    href={`tel:${BRAND.contact.phone.replace(/\s/g, "")}`}
-                    className="inline-flex h-12 items-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-7 text-[15px] font-semibold text-white transition hover:bg-white/[0.08]"
-                  >
-                    <Phone className="size-4" /> {BRAND.contact.phone}
-                  </a>
-                </div>
-                <p className="mt-6 inline-flex items-center gap-2 text-xs text-white/45">
-                  <Mail className="size-3.5" /> {BRAND.contact.email}
-                </p>
+                ))}
               </div>
+            </div>
+          </section>
+
+          {/* ------------------------------------------------------- Why + how */}
+          <section className="py-20">
+            <div className="container grid gap-14 lg:grid-cols-2">
+              <div>
+                <SectionHeading eyebrow={`Why ${BRAND.name}`} title="A partner for the whole life of your equipment" />
+                <div className="mt-8 grid gap-5 sm:grid-cols-2">
+                  {REASONS.map((reason) => (
+                    <div key={reason.title}>
+                      <reason.icon className="size-5 text-primary" aria-hidden />
+                      <h3 className="mt-3 text-[15px] font-semibold">{reason.title}</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{reason.body}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div id="support" className="scroll-mt-20 rounded-2xl border bg-card p-7 shadow-soft">
+                <p className="eyebrow">How it works</p>
+                <h2 className="mt-3 text-2xl font-bold tracking-tight">From request to resolution</h2>
+                <ol className="mt-6 space-y-5">
+                  {STEPS.map((step, index) => (
+                    <li key={step.title} className="flex gap-4">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <h3 className="text-[15px] font-semibold">{step.title}</h3>
+                        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <div className="mt-7 flex flex-wrap gap-2">
+                  <Link href={chatHref("repair")} className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white shadow-brand hover:brightness-110">
+                    <Wrench className="size-4" /> Request service
+                  </Link>
+                  <Link href={chatHref("track")} className="inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold hover:bg-secondary">
+                    Track my request
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* --------------------------------------------------------- Contact */}
+          <section className="dark brand-gradient text-foreground">
+            <div className="container grid gap-10 py-16 lg:grid-cols-[1.2fr_1fr] lg:items-center">
+              <div>
+                <h2 className="text-balance text-3xl font-bold tracking-tight text-white">Talk to the {BRAND.name} team</h2>
+                <p className="mt-3 max-w-xl text-white/65">
+                  Ask about a product, request a quotation or register a service request. The {BRAND.assistant.name} passes
+                  it straight to our team with a reference number.
+                </p>
+                <div className="mt-7 flex flex-wrap gap-3">
+                  <Link href="/chat" className="inline-flex h-11 items-center gap-2 rounded-lg bg-white px-5 text-[15px] font-semibold text-brand-ink transition hover:bg-white/90">
+                    <Headset className="size-4" /> Open the {BRAND.assistant.name}
+                  </Link>
+                  {wa && (
+                    <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg bg-whatsapp px-5 text-[15px] font-semibold text-white transition hover:brightness-105">
+                      <WhatsAppIcon className="size-4" /> Chat on WhatsApp
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {hasContact(company) || company.address || company.offices.length ? (
+                <dl className="grid gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-6 text-sm sm:grid-cols-2">
+                  {company.phone && (
+                    <ContactItem icon={Phone} label="Phone">
+                      <a href={`tel:+${digits(company.phone)}`} className="hover:text-brand-sky">{company.phone}</a>
+                    </ContactItem>
+                  )}
+                  {company.email && (
+                    <ContactItem icon={Mail} label="Email">
+                      <a href={`mailto:${company.email}`} className="break-all hover:text-brand-sky">{company.email}</a>
+                    </ContactItem>
+                  )}
+                  {company.address && (
+                    <ContactItem icon={MapPin} label="Head office">{company.address}</ContactItem>
+                  )}
+                  {company.offices.map((office) => (
+                    <ContactItem key={`${office.city}-${office.address}`} icon={MapPin} label={office.city}>
+                      {[office.address, office.phone].filter(Boolean).join(" · ") || "—"}
+                    </ContactItem>
+                  ))}
+                  {company.hours && <p className="text-xs text-white/45 sm:col-span-2">{company.hours}</p>}
+                </dl>
+              ) : null}
             </div>
           </section>
         </main>
 
-        <Footer />
+        <Footer company={company} categories={categories} />
       </div>
     </>
   );
 }
 
-function SectionHeading({
-  eyebrow,
-  title,
-  body,
-  align = "center",
-}: {
-  eyebrow: string;
-  title: React.ReactNode;
-  body?: string;
-  align?: "center" | "left";
-}) {
+function SectionHeading({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
   return (
-    <div className={align === "center" ? "mx-auto max-w-3xl text-center" : "max-w-xl"}>
-      <p className={`eyebrow ${align === "center" ? "justify-center" : ""}`}>{eyebrow}</p>
-      <h2 className="mt-5 text-balance text-4xl font-extrabold leading-[1.1] tracking-tightest text-white md:text-5xl">
-        {title}
-      </h2>
-      {body && <p className="mt-5 text-pretty text-base leading-relaxed text-white/55">{body}</p>}
+    <div className="max-w-2xl">
+      <p className="eyebrow">{eyebrow}</p>
+      <h2 className="mt-3 text-balance text-3xl font-bold tracking-tight">{title}</h2>
+      {body && <p className="mt-3 text-pretty leading-relaxed text-muted-foreground">{body}</p>}
     </div>
   );
 }
 
-/** A still frame of the concierge doing what it does — shown, not described. */
-function ConciergePreview() {
+function ContactItem({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="relative mx-auto w-full max-w-md animate-fade-in-up [animation-delay:120ms]">
-      <div className="absolute -inset-10 rounded-full bg-brand-violet/20 blur-3xl" aria-hidden />
-
-      <div className="ring-gradient relative overflow-hidden rounded-3xl bg-brand-slate/70 shadow-glow backdrop-blur-xl">
-        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
-          <span className="grid size-9 place-items-center rounded-full bg-brand-ink ring-1 ring-brand-cyan/30">
-            <LogoMark className="size-8" />
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-white">AI Concierge</p>
-            <p className="text-[11px] text-white/45">{BRAND.name}</p>
-          </div>
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
-            <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
-            Online
-          </span>
-        </div>
-
-        <div className="space-y-4 px-5 pb-14 pt-6 text-[13px] leading-relaxed">
-          <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-tr-md bg-brand px-4 py-2.5 text-white shadow-brand">
-            Mujhe apne business ke liye WhatsApp automation chahiye.
-          </p>
-          <div className="w-fit max-w-[92%] rounded-2xl rounded-tl-md border border-white/[0.07] bg-white/[0.04] px-4 py-3 text-white/85">
-            <p>
-              Bilkul. <strong className="text-white">WhatsApp Automation</strong> se aap ke
-              customers ko 24/7 jawab, order updates aur reminders milte hain.
-            </p>
-            <p className="mt-2 flex gap-2">
-              <span className="text-brand-cyan">•</span> Indicative price PKR 85,000 se shuru
-            </p>
-            <p className="mt-1 flex gap-2">
-              <span className="text-brand-cyan">•</span> Aam taur par 2–4 hafton mein live
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-brand-cyan/40 bg-brand-cyan/[0.08] px-3 py-1 text-[11px] font-medium text-white">
-              Request a quote
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-white/65">
-              Book a consultation
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute -bottom-7 -left-3 flex animate-float items-center gap-3 rounded-2xl border border-white/10 bg-brand-ink/90 px-4 py-3 shadow-elevated backdrop-blur sm:-left-10">
-        <CheckCircle2 className="size-5 text-emerald-400" />
-        <div className="leading-tight">
-          <p className="text-xs font-semibold text-white">Quote request logged</p>
-          <p className="font-mono text-[10px] text-white/45">BM-LEAD-7F3K2Q9A</p>
-        </div>
-      </div>
-
-      <div className="absolute -right-3 -top-5 flex animate-float items-center gap-2 rounded-full border border-white/10 bg-brand-ink/90 px-3.5 py-2 shadow-elevated backdrop-blur [animation-delay:1.5s] sm:-right-8">
-        <ShieldCheck className="size-4 text-brand-cyan" />
-        <span className="text-[11px] font-medium text-white/80">Grounded in BITSOL&apos;s knowledge</span>
+    <div className="flex gap-3">
+      <Icon className="mt-0.5 size-4 shrink-0 text-brand-sky" />
+      <div className="min-w-0">
+        <dt className="text-[11px] uppercase tracking-[0.14em] text-white/45">{label}</dt>
+        <dd className="mt-0.5 text-white/85">{children}</dd>
       </div>
     </div>
+  );
+}
+
+/** An illustration of the assistant, labelled as an example — not a real conversation. */
+function AssistantPreview() {
+  return (
+    <figure className="relative mx-auto w-full max-w-md" aria-label="Example conversation with the Pros-Link Assistant">
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white text-brand-ink shadow-glow">
+        <div className="flex items-center gap-3 bg-brand-ink px-4 py-3 text-white">
+          <LogoMark className="size-8" />
+          <div className="leading-tight">
+            <p className="text-sm font-semibold">{BRAND.assistant.name}</p>
+            <p className="text-[11px] text-white/60">{BRAND.assistant.subtitle}</p>
+          </div>
+        </div>
+        <div className="space-y-3 bg-brand-surface px-4 py-5 text-[13px] leading-relaxed">
+          <p className="ml-auto w-fit max-w-[80%] rounded-lg rounded-tr-sm bg-brand-blue px-3 py-2 text-white">
+            I need a photocopier for my office.
+          </p>
+          <p className="w-fit max-w-[85%] rounded-lg rounded-tl-sm border bg-white px-3 py-2">
+            Happy to help. Roughly how many pages does your office copy or print in a month, and do you also need
+            scanning?
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {["Photocopiers / MFPs", "Request a Quote", "Talk to Sales"].map((label) => (
+              <span key={label} className="rounded-md border border-brand-blue/25 bg-white px-2.5 py-1 text-[12px] font-medium text-brand-blue">
+                {label}
+              </span>
+            ))}
+          </div>
+          <p className="flex w-fit items-center gap-2 rounded-md bg-emerald-50 px-2.5 py-1.5 text-[12px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/15">
+            <BadgeCheck className="size-3.5" /> Quote request logged — reference shared with you
+          </p>
+        </div>
+      </div>
+      <figcaption className="mt-3 text-center text-[11px] text-white/45">Example conversation</figcaption>
+    </figure>
   );
 }

@@ -1,7 +1,7 @@
 import type { NotificationChannel } from "@prisma/client";
 import { prisma } from "./db";
 import { config } from "./config";
-import { DEPARTMENT } from "./brands";
+import { DEPARTMENT } from "@/config/brand";
 
 /**
  * =============================================================================

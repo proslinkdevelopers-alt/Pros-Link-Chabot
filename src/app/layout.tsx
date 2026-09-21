@@ -1,9 +1,8 @@
 import type { Metadata, Viewport } from "next";
 // Self-hosted, so a build on a host without Google Fonts access still gets it.
-import "@fontsource-variable/montserrat";
+import "@fontsource-variable/plus-jakarta-sans";
 import "./globals.css";
-import { BRANDING } from "@/lib/branding";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { SEO, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -13,11 +12,22 @@ export const metadata: Metadata = {
     template: `%s | ${BRAND.name}`,
   },
   description: SEO.homeDescription,
-  applicationName: BRANDING.product.name,
-  authors: [{ name: BRANDING.developer.name, url: BRANDING.developer.url }],
+  applicationName: BRAND.name,
   creator: BRAND.name,
   publisher: BRAND.name,
   category: "business",
+  keywords: [
+    "Pros-Link",
+    "office equipment Pakistan",
+    "digital duplicator",
+    "photocopier",
+    "MFP",
+    "printer",
+    "office supplies",
+    "toner and consumables",
+    "photocopier repair",
+    "printer maintenance",
+  ],
   openGraph: {
     type: "website",
     siteName: BRAND.name,
@@ -42,8 +52,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050816",
-  colorScheme: "dark",
+  themeColor: BRAND.colors.ink,
   width: "device-width",
   initialScale: 1,
 };

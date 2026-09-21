@@ -29,9 +29,9 @@ export default function GlobalError({
           display: "grid",
           placeItems: "center",
           padding: "1.5rem",
-          backgroundColor: "#050816",
+          backgroundColor: "#0A1628",
           backgroundImage:
-            "radial-gradient(900px 520px at 12% -12%, rgba(0,217,255,0.16), transparent 60%), radial-gradient(900px 560px at 92% -6%, rgba(124,58,237,0.26), transparent 62%)",
+            "radial-gradient(900px 480px at 95% -10%, rgba(29,95,224,0.28), transparent 60%)",
           color: "white",
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -49,8 +49,8 @@ export default function GlobalError({
               color: "rgba(255,255,255,0.75)",
             }}
           >
-            The BITSOL Marketing assistant hit an unexpected error. Please try again — if it
-            keeps happening, contact us and we&apos;ll look into it.
+            Pros-Link hit an unexpected error. Please try again — if it keeps happening,
+            contact our team and we&apos;ll look into it.
           </p>
 
           {error.digest && (
@@ -72,9 +72,9 @@ export default function GlobalError({
             style={{
               marginTop: "1.75rem",
               padding: "0.625rem 1.5rem",
-              borderRadius: "9999px",
+              borderRadius: "0.625rem",
               border: "none",
-              backgroundImage: "linear-gradient(135deg, #2563EB, #7C3AED)",
+              background: "#1D5FE0",
               color: "white",
               fontSize: "0.875rem",
               fontWeight: 600,

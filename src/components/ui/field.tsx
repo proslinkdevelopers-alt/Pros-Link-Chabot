@@ -2,10 +2,9 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Minimal form primitives matching the Input/Card style, used by the in-chat
- * workflow forms (lead capture, meeting booking, support) and the admin
+ * Minimal form primitives matching the Input/Card style, used across the admin
  * console. Deliberately unstyled beyond the shared tokens so they sit equally
- * well on the light admin workspace and the midnight chat surface.
+ * well on the light workspace and navy surfaces.
  */
 
 const Textarea = React.forwardRef<
@@ -15,7 +14,7 @@ const Textarea = React.forwardRef<
   <textarea
     ref={ref}
     className={cn(
-      "flex min-h-[92px] w-full resize-y rounded-xl border border-input bg-background px-4 py-2.5 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+      "flex min-h-[92px] w-full resize-y rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
       className
     )}
     {...props}
@@ -30,7 +29,7 @@ const Select = React.forwardRef<
   <select
     ref={ref}
     className={cn(
-      "flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+      "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
       className
     )}
     {...props}

@@ -1,7 +1,7 @@
 /**
  * Shared hosting gives the build very little memory. Next parallelises page
  * generation across one worker per CPU, and each worker holds its own copy of
- * the compiler — which is what gets a build OOM-killed on a Hostinger Business
+ * the compiler — which is what gets a build OOM-killed on a small shared-hosting
  * plan. A killed worker is not reported as "out of memory": Next falls back to
  * the pages-router error document and fails with "<Html> should not be imported
  * outside of pages/_document" while prerendering /404, which sends you looking
@@ -46,19 +46,6 @@ const nextConfig = {
     : {}),
   // Keep server-only packages out of the client/edge bundle (Next 15 top-level key).
   serverExternalPackages: ["@prisma/client", "@anthropic-ai/sdk", "ioredis"],
-  async redirects() {
-    return [
-      // The hosting panel also answers on www.ai.bitsolmarketing.com with the
-      // same pages. Two hosts serving identical content split ranking signals,
-      // so the www host sends everything to the canonical one, permanently.
-      {
-        source: "/:path*",
-        has: [{ type: "host", value: "www.ai.bitsolmarketing.com" }],
-        destination: "https://ai.bitsolmarketing.com/:path*",
-        permanent: true,
-      },
-    ];
-  },
   async rewrites() {
     return [
       // The WhatsApp callback URL registered with Meta is the short, public

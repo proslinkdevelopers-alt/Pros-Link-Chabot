@@ -26,12 +26,12 @@ export default function NotFound() {
         display: "grid",
         placeItems: "center",
         padding: "1.5rem",
-        backgroundColor: "#050816",
+        backgroundColor: "#0A1628",
         backgroundImage:
-          "radial-gradient(900px 520px at 12% -12%, rgba(0,217,255,0.16), transparent 60%), radial-gradient(900px 560px at 92% -6%, rgba(124,58,237,0.26), transparent 62%)",
+          "radial-gradient(900px 480px at 95% -10%, rgba(29,95,224,0.28), transparent 60%)",
         color: "white",
         fontFamily:
-          '"Montserrat Variable", Montserrat, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+          '"Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
       }}
     >
       <div style={{ width: "100%", maxWidth: "30rem", textAlign: "center" }}>
@@ -54,7 +54,7 @@ export default function NotFound() {
             margin: "0.5rem 0 0",
             lineHeight: 1,
             letterSpacing: "-0.04em",
-            backgroundImage: "linear-gradient(to right, #00D9FF, #CF30AA)",
+            backgroundImage: "linear-gradient(to right, #FFFFFF, #9CC4FF)",
             WebkitBackgroundClip: "text",
             backgroundClip: "text",
             color: "transparent",
@@ -73,8 +73,8 @@ export default function NotFound() {
             color: "rgba(255,255,255,0.6)",
           }}
         >
-          The link may be out of date. Our AI concierge is still here and happy to help with
-          anything BITSOL Marketing does.
+          The link may be out of date. The Pros-Link Assistant can still help you find
+          products, request a quote or arrange service.
         </p>
 
         <div
@@ -90,22 +90,21 @@ export default function NotFound() {
             href="/chat"
             style={{
               padding: "0.75rem 1.5rem",
-              borderRadius: "9999px",
-              backgroundImage: "linear-gradient(135deg, #2563EB, #7C3AED)",
+              borderRadius: "0.625rem",
+              background: "#1D5FE0",
               color: "white",
               fontSize: "0.875rem",
               fontWeight: 600,
               textDecoration: "none",
-              boxShadow: "0 12px 32px -12px rgba(124,58,237,0.65)",
             }}
           >
-            Talk to the concierge
+            Open the assistant
           </a>
           <a
             href="/"
             style={{
               padding: "0.75rem 1.5rem",
-              borderRadius: "9999px",
+              borderRadius: "0.625rem",
               border: "1px solid rgba(255,255,255,0.18)",
               background: "rgba(255,255,255,0.04)",
               color: "white",
@@ -119,8 +118,7 @@ export default function NotFound() {
         </div>
 
         <p style={{ marginTop: "2.75rem", fontSize: "0.75rem", fontWeight: 800, letterSpacing: "-0.01em" }}>
-          BITSOL<span style={{ color: "#00D9FF" }}>.</span>{" "}
-          <span style={{ fontWeight: 500, color: "rgba(255,255,255,0.4)" }}>Marketing</span>
+          Pros<span style={{ color: "#5AA2FF" }}>-</span>Link
         </p>
       </div>
     </main>

@@ -1,164 +1,120 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  ArrowRight,
-  Bot,
-  Globe,
-  Languages,
-  Lock,
-  MessageCircle,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, ClipboardList, Headset, Languages, ShieldCheck, Wrench } from "lucide-react";
 import { SiteHeader } from "@/components/branding/SiteHeader";
 import { Footer } from "@/components/branding/Footer";
-import { BRANDING, brandName, brandTagline, brandUrl } from "@/lib/branding";
-import { BRAND } from "@/lib/brands";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { OG_IMAGE, ORGANIZATION_ID, SITE_URL, absoluteUrl, breadcrumbJsonLd, conciergeJsonLd } from "@/lib/site";
+import { BRAND } from "@/config/brand";
+import { listCategories } from "@/lib/catalog";
+import { getCompanyProfile, whatsappLink } from "@/lib/company";
+import { chatHref } from "@/lib/chat-start";
+import { OG_IMAGE, breadcrumbJsonLd, organizationJsonLd } from "@/lib/site";
 
-const ABOUT_TITLE = "About the AI Concierge";
-const ABOUT_DESCRIPTION = `Meet the ${BRAND.name} AI concierge: grounded answers, quotes, consultations and support tickets on web and WhatsApp, 24/7, in four languages.`;
+const TITLE = `About ${BRAND.name}`;
+const DESCRIPTION = `${BRAND.description} Learn what ${BRAND.name} offers and how the ${BRAND.assistant.name} helps.`;
 
 export const metadata: Metadata = {
-  title: ABOUT_TITLE,
-  description: ABOUT_DESCRIPTION,
+  title: TITLE,
+  description: DESCRIPTION,
   alternates: { canonical: "/about" },
-  openGraph: { url: "/about", title: `${ABOUT_TITLE} | ${BRAND.name}`, description: ABOUT_DESCRIPTION, images: [OG_IMAGE] },
+  openGraph: { url: "/about", title: `${TITLE} | ${BRAND.name}`, description: DESCRIPTION, images: [OG_IMAGE] },
 };
 
-const FEATURES = [
+export const dynamic = "force-dynamic";
+
+const ASSISTANT = [
   {
-    icon: Sparkles,
-    title: "Grounded answers",
-    desc: "Replies are drawn from BITSOL Marketing's approved knowledge base first — services, process, policies and indicative pricing — never invented.",
+    icon: ClipboardList,
+    title: "Quotes and service requests, logged",
+    body: "Quote requests, service tickets and support requests are created in our system with a reference number you can track.",
   },
   {
-    icon: Bot,
-    title: "Actions, not just answers",
-    desc: "Quote requests, consultations and support tickets are created with real reference numbers and routed straight to the team.",
+    icon: ShieldCheck,
+    title: "Only what we have confirmed",
+    body: "The assistant shares specifications, prices and availability only when our team has published them. Anything else, the team confirms.",
+  },
+  {
+    icon: Headset,
+    title: "A person when you need one",
+    body: "Ask for a person at any point and the conversation goes to our team with everything you have already said.",
   },
   {
     icon: Languages,
-    title: "Four languages",
-    desc: "English, Urdu, Roman Urdu and Punjabi — tolerant of spelling mistakes, abbreviations and mixed-language messages.",
-  },
-  {
-    icon: MessageCircle,
-    title: "Web and WhatsApp",
-    desc: "The same concierge answers on this site and on the BITSOL WhatsApp number, so the answer never depends on the channel.",
-  },
-  {
-    icon: Globe,
-    title: "Always available",
-    desc: "A lead at 2am is captured as reliably as one at 2pm, and it is waiting for the team when the office opens.",
-  },
-  {
-    icon: Lock,
-    title: "Secure by design",
-    desc: "Rate limiting, signed sessions, role-based access, validated input and a full audit trail across every module.",
+    title: "English, Urdu and Roman Urdu",
+    body: "Write the way you normally would — the assistant replies in your language.",
   },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const [company, categories] = await Promise.all([getCompanyProfile(), listCategories()]);
+
   return (
-    <div className="dark min-h-dvh bg-background text-foreground">
+    <div className="min-h-dvh bg-background">
       <JsonLd
         graph={[
-          {
-            "@type": "AboutPage",
-            "@id": `${absoluteUrl("/about")}#page`,
-            url: absoluteUrl("/about"),
-            name: ABOUT_TITLE,
-            description: ABOUT_DESCRIPTION,
-            isPartOf: { "@id": `${SITE_URL}/#website` },
-            about: { "@id": ORGANIZATION_ID },
-            mainEntity: { "@id": conciergeJsonLd()["@id"] },
-          },
+          organizationJsonLd(company),
           breadcrumbJsonLd([
             { name: "Home", path: "/" },
             { name: "About", path: "/about" },
           ]),
         ]}
       />
-      <SiteHeader />
+      <SiteHeader whatsappUrl={whatsappLink(company, `Hello ${BRAND.name}`)} logoUrl={company.logoUrl || undefined} />
 
       <main>
-        <section className="brand-gradient relative overflow-hidden">
-          <div className="bg-grid pointer-events-none absolute inset-0" aria-hidden />
-          <div className="container relative max-w-4xl py-24 text-center md:py-32">
-            <p className="eyebrow justify-center">About</p>
-            <h1 className="mt-6 text-balance text-5xl font-extrabold leading-[1.05] tracking-tightest text-white md:text-6xl">
-              A firm built on AI —{" "}
-              <span className="text-gradient">with a concierge to match.</span>
+        <section className="dark brand-gradient text-foreground">
+          <div className="container py-16 md:py-20">
+            <p className="eyebrow text-white/60">About us</p>
+            <h1 className="mt-4 max-w-3xl text-balance text-4xl font-extrabold tracking-tightest text-white sm:text-5xl">
+              {BRAND.name} — {BRAND.tagline.toLowerCase()}.
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-white/60">
-              {BRAND.description}
-            </p>
-            <p className="mt-6 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-              {BRAND.purpose.join(" · ")}
-            </p>
+            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">{BRAND.description}</p>
           </div>
         </section>
 
-        <section className="container py-24">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="eyebrow justify-center">{BRANDING.product.name}</p>
-            <h2 className="mt-5 text-balance text-4xl font-extrabold leading-tight tracking-tightest text-white">
-              What the concierge does for you
-            </h2>
-          </div>
+        <section className="py-16">
+          <div className="container grid gap-12 lg:grid-cols-2">
+            <div>
+              <p className="eyebrow">What we offer</p>
+              <h2 className="mt-3 text-2xl font-bold tracking-tight">Equipment, supplies and the service behind them</h2>
+              <ul className="mt-6 grid gap-2 sm:grid-cols-2">
+                {BRAND.businessAreas.map((area) => (
+                  <li key={area} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm font-medium">
+                    <Wrench className="size-3.5 shrink-0 text-primary" aria-hidden />
+                    {area}
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((feature) => (
-              <div
-                key={feature.title}
-                className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-7 transition hover:border-white/15"
+            <div>
+              <p className="eyebrow">The {BRAND.assistant.name}</p>
+              <h2 className="mt-3 text-2xl font-bold tracking-tight">{BRAND.assistant.subtitle}</h2>
+              <div className="mt-6 space-y-5">
+                {ASSISTANT.map((item) => (
+                  <div key={item.title} className="flex gap-4">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/[0.08] text-primary">
+                      <item.icon className="size-[18px]" aria-hidden />
+                    </span>
+                    <div>
+                      <h3 className="text-[15px] font-semibold">{item.title}</h3>
+                      <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href={chatHref("sales")}
+                className="mt-8 inline-flex h-11 items-center gap-2 rounded-lg bg-brand px-5 text-[15px] font-semibold text-white shadow-brand hover:brightness-110"
               >
-                <span className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-brand-blue/25 to-brand-violet/25 text-brand-cyan ring-1 ring-inset ring-white/10">
-                  <feature.icon className="size-5" />
-                </span>
-                <h3 className="mt-5 text-lg font-bold tracking-tight text-white">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="container pb-24">
-          <div className="ring-gradient relative overflow-hidden rounded-[2rem] bg-brand-slate/60 p-10 md:p-14">
-            <div className="brand-gradient pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-            <div className="relative grid items-center gap-10 md:grid-cols-[1.4fr_1fr]">
-              <div>
-                <p className="eyebrow">{BRANDING.product.poweredBy}</p>
-                <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white">{brandTagline}</h2>
-                <p className="mt-4 text-sm text-white/55">
-                  Designed &amp; developed by{" "}
-                  <Link
-                    href={brandUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-white hover:text-brand-cyan"
-                  >
-                    {brandName}
-                  </Link>
-                  .
-                </p>
-              </div>
-              <div className="flex md:justify-end">
-                <Link
-                  href="/chat"
-                  className="group inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 text-[15px] font-semibold text-brand-ink transition hover:bg-white/90"
-                >
-                  Try the concierge
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-              </div>
+                Talk to our team <ArrowRight className="size-4" />
+              </Link>
             </div>
           </div>
         </section>
       </main>
 
-      <Footer />
+      <Footer company={company} categories={categories} />
     </div>
   );
 }

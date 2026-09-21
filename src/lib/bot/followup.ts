@@ -1,6 +1,6 @@
 import type { LeadStage } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { asLanguage, type Language } from "@/lib/i18n";
 import { logEvent } from "@/lib/notify";
 import { findService } from "@/data/marketing/services";

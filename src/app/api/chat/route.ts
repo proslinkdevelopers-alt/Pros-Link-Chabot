@@ -9,7 +9,7 @@ import {
   suggestFollowUps,
   type CustomerDetails,
 } from "@/lib/ai";
-import { BRAND, DEPARTMENT } from "@/lib/brands";
+import { BRAND, DEPARTMENT } from "@/config/brand";
 import { generateReference, generateConversationReference } from "@/lib/utils";
 import { rateLimit } from "@/lib/redis";
 import { prisma } from "@/lib/db";
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (ticketId) {
-          const note = `\n\n🎫 I've created ticket **${ticketId}** and passed this to the ${BRAND.name} team. Keep this reference for follow-up — you can also reach them on ${BRAND.contact.phone}.`;
+          const note = `\n\n🎫 I've created ticket **${ticketId}** and passed this to the ${BRAND.name} team. Keep this reference for follow-up.`;
           assistantText += note;
           send({ type: "chunk", text: note });
         }

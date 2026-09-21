@@ -1,7 +1,7 @@
 import type { LeadStage, Prisma, Priority, TicketCategory, TrafficSource } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { config as appConfig } from "@/lib/config";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import type { Language } from "@/lib/i18n";
 import { logEvent, notifyTeam } from "@/lib/notify";
 import { generateReference, truncate } from "@/lib/utils";

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { requirePermission } from "@/lib/admin/guard";
 import { isOwn } from "@/lib/admin/queries";
 import { logEvent } from "@/lib/notify";

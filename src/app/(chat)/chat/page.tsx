@@ -2,11 +2,11 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { ChatWindow } from "@/components/chat/ChatWindow";
-import { BitsolBranding } from "@/components/branding/BitsolBranding";
+import { Credit } from "@/components/branding/Credit";
 import { Logo } from "@/components/branding/Logo";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { OG_IMAGE, breadcrumbJsonLd, conciergeJsonLd } from "@/lib/site";
+import { OG_IMAGE, breadcrumbJsonLd, assistantJsonLd } from "@/lib/site";
 
 const CHAT_TITLE = "Chat with Our AI Concierge: Free Quotes 24/7";
 const CHAT_DESCRIPTION = `Ask the ${BRAND.name} AI concierge about AI chatbots, WhatsApp automation, websites and marketing. Get pricing, a quote or a free consultation in English or Urdu.`;
@@ -23,7 +23,7 @@ export default function ChatPage() {
     <div className="dark brand-gradient relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-0 sm:p-6">
       <JsonLd
         graph={[
-          conciergeJsonLd(),
+          assistantJsonLd(),
           breadcrumbJsonLd([
             { name: "Home", path: "/" },
             { name: "AI Concierge", path: "/chat" },
@@ -59,7 +59,7 @@ export default function ChatPage() {
 
         {/* Chat widget footer — branding */}
         <div className="border-t border-white/[0.06] px-4 py-2.5">
-          <BitsolBranding className="justify-center" />
+          <Credit className="text-center" />
         </div>
       </div>
     </div>

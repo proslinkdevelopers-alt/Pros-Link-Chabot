@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { generateReference } from "@/lib/utils";
 import { logEvent, notifyTeam } from "@/lib/notify";
 import { clientIp, conversationIdFor, created, failed, invalid, throttle } from "@/lib/api";

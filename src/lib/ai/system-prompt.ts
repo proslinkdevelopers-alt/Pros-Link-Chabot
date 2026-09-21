@@ -1,5 +1,5 @@
 import type { KnowledgeEntry } from "@/types";
-import { BRAND } from "@/lib/brands";
+import { BRAND } from "@/config/brand";
 import { LANGUAGE_PROFILES, type Language } from "@/lib/i18n";
 import { MARKETING_KB_CATEGORIES } from "@/data/marketing/knowledge-base";
 import { MARKETING_SERVICES, findService } from "@/data/marketing/services";
@@ -61,12 +61,12 @@ export function buildSystemPrompt(context: PromptContext): string {
   const { customer } = context;
   const bot = customer.bot;
   const contact = bot?.contact ?? {
-    whatsapp: BRAND.contact.whatsapp,
-    phone: BRAND.contact.phone,
-    email: BRAND.contact.email,
-    website: BRAND.contact.website,
-    address: `${BRAND.contact.address}, ${BRAND.contact.city}`,
-    hours: BRAND.contact.hours,
+    whatsapp: "",
+    phone: "",
+    email: "",
+    website: "",
+    address: "",
+    hours: "",
   };
 
   const serviceKnowledge = (bot?.knowledge ?? []).map(
@@ -91,7 +91,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 # Who you are
 ${BRAND.description}
 
-**What we do:** ${BRAND.purpose.join(" · ")}
+**What we do:** ${BRAND.businessAreas.join(" · ")}
 **Positioning:** ${BRAND.tagline}
 
 You are part of the customer care team, so you speak for the company — "we", "our team". You are ${BRAND.name}'s AI assistant: if someone sincerely asks whether they are talking to a person or a bot, say so honestly and offer to bring in someone from the team.

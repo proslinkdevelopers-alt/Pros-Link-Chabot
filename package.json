@@ -1,9 +1,9 @@
 {
-  "name": "bitsol-ai-assistant",
+  "name": "proslink-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "BITSOL AI Assistant — the AI concierge and admin console for BITSOL Marketing. Designed & Developed by BITSOL MARKETING",
-  "author": "BITSOL MARKETING (https://bitsolmarketing.com)",
+  "description": "Pros-Link customer service, sales and CRM platform — the Pros-Link Assistant (web and WhatsApp) and Pros-Link Admin.",
+  "author": "Pros-Link",
   "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev",
@@ -26,7 +26,7 @@
   "//dependencies": "Anything `next build` needs lives here, not in devDependencies. npm omits devDependencies whenever NODE_ENV=production, and hosting panels apply that variable to the install step as well as the running app — which produces an install that reports success followed by a build that dies on a missing Tailwind plugin. Since this project is built on the host it is deployed to, its build tools are production dependencies in practice. The cost is disk in node_modules; the alternative is a deploy that fails depending on one environment variable.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
-    "@fontsource-variable/montserrat": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@prisma/client": "^6.14.0",
     "@types/node": "^22.15.0",
     "@types/react": "19.1.0",

@@ -7,7 +7,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { config } from "./config";
-import { DEPARTMENT } from "./brands";
+import { DEPARTMENT } from "@/config/brand";
 import type { Department, UserRole } from "@prisma/client";
 
 const secret = new TextEncoder().encode(config.jwt.secret);

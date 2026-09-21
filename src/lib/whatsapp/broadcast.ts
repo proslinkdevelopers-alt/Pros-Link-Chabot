@@ -1,7 +1,7 @@
 import type { Prisma, WhatsappContact } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { sendTemplate, type TemplateHeaderMedia } from "./client";
 import { countPlaceholders, renderTemplate } from "./templates";
 

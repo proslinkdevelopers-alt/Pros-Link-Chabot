@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { BRAND } from "./brands";
+import { BRAND } from "@/config/brand";
 
 /** Merge Tailwind class names with conflict resolution (shadcn/ui convention). */
 export function cn(...inputs: ClassValue[]) {

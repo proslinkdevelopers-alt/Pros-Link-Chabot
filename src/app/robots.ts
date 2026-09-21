@@ -2,8 +2,7 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
 
 /**
- * Public pages are open to every crawler, AI search crawlers included, so the
- * concierge can be cited in AI answers. The console and API are not.
+ * Public pages are open to every crawler. The console and the API are not.
  *
  * /login is deliberately not blocked: it carries a noindex tag, and a crawler
  * that is blocked from a page can never read that tag.

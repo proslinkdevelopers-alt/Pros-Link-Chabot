@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { DEPARTMENT } from "@/lib/brands";
+import { DEPARTMENT } from "@/config/brand";
 import { generateReference, truncate } from "@/lib/utils";
 import { logEvent, notifyTeam } from "@/lib/notify";
 import { findService } from "@/data/marketing/services";
