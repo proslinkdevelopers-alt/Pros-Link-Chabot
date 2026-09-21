@@ -362,7 +362,7 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
       const owner = await ownerFor(input.team);
       if (owner) {
         data.ownerId = owner;
-        await notifyStaff({ userIds: [owner], subject: `New lead assigned to you — ${customerName(details)}`, link: `/admin/crm/leads/${id}` });
+        await notifyStaff({ userIds: [owner], subject: `New lead assigned to you — ${customerName(details)}`, link: `/admin/leads/${id}` });
       }
     }
 
@@ -560,9 +560,9 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
             to: recipients(effect.team),
             subject,
             body: `A quotation was requested on ${channelName}.\n\n${notes}\n\nRequirement:\n${details.requirements ?? "—"}\n\nNext action: ${effect.nextAction}`,
-            link: "/admin/quotes",
+            link: `/admin/quotes/${quote.id}`,
           });
-          await notifyStaff({ permission: "quotes.manage", subject, body: details.interest ?? details.requirements ?? "", link: "/admin/quotes" });
+          await notifyStaff({ permission: "quotes.manage", subject, body: details.interest ?? details.requirements ?? "", link: `/admin/quotes/${quote.id}` });
           await logEvent({
             action: "quote.requested",
             entity: "Quote",
@@ -606,9 +606,9 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
             to: recipients(team),
             subject,
             body: effect.handover?.text ?? `${details.requirements ?? ""}\n\n${machine ? `Machine: ${machine}\n` : ""}${customerLines(details).join("\n")}`,
-            link: `/admin/service/tickets/${ticket.id}`,
+            link: `/admin/tickets/${ticket.id}`,
           });
-          await notifyStaff({ permission: "tickets.manage", subject, body: truncate(details.requirements ?? "", 200), link: `/admin/service/tickets/${ticket.id}` });
+          await notifyStaff({ permission: "tickets.manage", subject, body: truncate(details.requirements ?? "", 200), link: `/admin/tickets/${ticket.id}` });
           await logEvent({
             action: "ticket.created",
             entity: "Ticket",
@@ -650,9 +650,9 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
             to: recipients(effect.team),
             subject,
             body: `${effect.topic} requested on ${channelName}.\n${effect.note ? `Preferred time, in their words: "${effect.note}"\n` : ""}\n${customerLines(details).join("\n")}`,
-            link: leadId ? `/admin/crm/leads/${leadId}` : "/admin/appointments",
+            link: leadId ? `/admin/leads/${leadId}` : "/admin/appointments",
           });
-          await notifyStaff({ permission: "appointments.manage", subject, link: leadId ? `/admin/crm/leads/${leadId}` : "/admin/appointments" });
+          await notifyStaff({ permission: "appointments.manage", subject, link: leadId ? `/admin/leads/${leadId}` : "/admin/appointments" });
           return {};
         }
 
@@ -730,7 +730,7 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
             owner = (await prisma.lead.findUnique({ where: { id: leadId }, select: { ownerId: true } }))?.ownerId ?? null;
           }
           const subject = `${score.temperature === "HIGH_PRIORITY" ? "High-priority" : "Hot"} lead — ${customerName(details)} (${score.value}/100)`;
-          const link = leadId ? `/admin/crm/leads/${leadId}` : `/admin/conversations/${ctx.conversationId}`;
+          const link = leadId ? `/admin/leads/${leadId}` : `/admin/conversations/${ctx.conversationId}`;
           await notifyTeam({ to: recipients(summary.team), subject, body: summary.text, link });
           await notifyStaff(owner ? { userIds: [owner], subject, link } : { permission: "leads.manage", subject, link });
           return {};

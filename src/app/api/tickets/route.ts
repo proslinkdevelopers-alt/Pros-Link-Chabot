@@ -114,9 +114,9 @@ export async function POST(req: NextRequest) {
       ]
         .filter((line) => line !== null)
         .join("\n"),
-      link: `/admin/service/tickets/${ticket.id}`,
+      link: `/admin/tickets/${ticket.id}`,
     });
-    await notifyStaff({ permission: "tickets.manage", subject, link: `/admin/service/tickets/${ticket.id}` });
+    await notifyStaff({ permission: "tickets.manage", subject, link: `/admin/tickets/${ticket.id}` });
     await logEvent({
       action: "ticket.created",
       entity: "Ticket",

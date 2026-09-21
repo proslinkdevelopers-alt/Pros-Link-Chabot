@@ -420,7 +420,7 @@ async function announce(record: CreatedRecord, details: CustomerDetails, context
   ];
 
   if (record.kind === "LEAD") {
-    const link = `/admin/crm/leads/${record.id}`;
+    const link = `/admin/leads/${record.id}`;
     const subject = `New lead ${record.reference} — ${name}${details.company ? ` (${details.company})` : ""}`;
     await notifyTeam({
       to: context.notifyTo,

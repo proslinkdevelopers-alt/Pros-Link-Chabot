@@ -77,6 +77,24 @@ const nextConfig = {
       { source: "/webhook", destination: "/api/whatsapp/webhook" },
     ];
   },
+  async redirects() {
+    // Console pages that moved in the Pros-Link rebuild. Bookmarks and links in
+    // notifications written before it still land in the right place.
+    return [
+      { source: "/admin/crm/leads/:id", destination: "/admin/leads/:id", permanent: false },
+      { source: "/admin/crm/leads", destination: "/admin/leads", permanent: false },
+      { source: "/admin/crm/customers", destination: "/admin/customers", permanent: false },
+      { source: "/admin/crm/follow-ups", destination: "/admin", permanent: false },
+      { source: "/admin/service/tickets/:id", destination: "/admin/tickets/:id", permanent: false },
+      { source: "/admin/support/tickets", destination: "/admin/support", permanent: false },
+      { source: "/admin/meetings", destination: "/admin/appointments", permanent: false },
+      { source: "/admin/users", destination: "/admin/team", permanent: false },
+      { source: "/admin/roles", destination: "/admin/team?tab=roles", permanent: false },
+      { source: "/admin/logs", destination: "/admin/audit", permanent: false },
+      { source: "/admin/integrations", destination: "/admin/settings?tab=integrations", permanent: false },
+      { source: "/admin/messaging/whatsapp", destination: "/admin/whatsapp", permanent: false },
+    ];
+  },
   async headers() {
     // Baseline security headers. Nginx may add/override in production.
     return [

@@ -1,194 +1,184 @@
+import { Download } from "lucide-react";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requirePagePermission } from "@/lib/staff";
-import { dashboardStats, OWN, safeQuery } from "@/lib/admin/queries";
-import { DbNotice, PageHeader, StatCard } from "@/components/admin/ui";
-import { Card } from "@/components/ui/card";
-import { MessagesSquare, Percent, Timer, TrendingUp } from "lucide-react";
-import { humanise } from "@/lib/utils";
+import { DEPARTMENT } from "@/config/brand";
+import { hasPermission, requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
+import { delta, lastDays, perDay, sum } from "@/lib/admin/metrics";
+import { PIPELINE_STAGES, QUOTE_STATUS_LABEL, SOURCE_LABEL, STAGE_LABEL, TICKET_CATEGORY_LABEL, TICKET_STATUS_LABEL } from "@/lib/admin/labels";
+import { buttonVariants } from "@/components/ui/button";
+import { DataTable, DbNotice, FilterBar, FilterChip, PageHeader, Section, StatCard } from "@/components/admin/ui";
+import { BarList, TrendChart } from "@/components/admin/charts";
+import { formatPkr } from "@/lib/utils";
 
-export const metadata = { title: "Reports & Analytics" };
+export const metadata = { title: "Reports" };
 
-const DAYS = 30;
+const RANGES = [7, 30, 90] as const;
 
-export default async function ReportsPage() {
-  await requirePagePermission("reports.view", "/admin/reports");
-  const since = new Date();
-  since.setDate(since.getDate() - DAYS);
-  since.setHours(0, 0, 0, 0);
+function hours(value: number | null): string {
+  if (value === null) return "—";
+  if (value < 1) return `${Math.round(value * 60)} min`;
+  if (value < 48) return `${value.toFixed(1)} h`;
+  return `${(value / 24).toFixed(1)} days`;
+}
 
-  const [{ data: stats, error: statsError }, { data: trends, error: trendError }] =
-    await Promise.all([
-      dashboardStats(),
-      safeQuery(
-        async () => {
-          const [conversations, leadStages, leadSources, ticketStatuses, latency] =
-            await Promise.all([
-              prisma.conversation.findMany({
-                where: { ...OWN, createdAt: { gte: since } },
-                select: { createdAt: true },
-              }),
-              prisma.lead.groupBy({ by: ["stage"], _count: { _all: true } }),
-              prisma.lead.groupBy({ by: ["source"], _count: { _all: true } }),
-              prisma.ticket.groupBy({
-                by: ["status"],
-                _count: { _all: true },
-                where: OWN,
-              }),
-              prisma.message.aggregate({
-                where: {
-                  role: "ASSISTANT",
-                  createdAt: { gte: since },
-                  latencyMs: { not: null },
-                  ...OWN,
-                },
-                _avg: { latencyMs: true },
-              }),
-            ]);
-          return {
-            conversations,
-            leadStages,
-            leadSources,
-            ticketStatuses,
-            avgLatency: Math.round(latency._avg.latencyMs ?? 0),
-          };
-        },
-        {
-          conversations: [] as Array<{ createdAt: Date }>,
-          leadStages: [] as Array<{ stage: string; _count: { _all: number } }>,
-          leadSources: [] as Array<{ source: string; _count: { _all: number } }>,
-          ticketStatuses: [] as Array<{ status: string; _count: { _all: number } }>,
-          avgLatency: 0,
-        }
-      ),
-    ]);
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
+  const staff = await requirePagePermission("reports.view", "/admin/reports");
+  const { days: raw } = await searchParams;
+  const days = RANGES.find((range) => String(range) === raw) ?? 30;
+  const since = new Date(Date.now() - days * 86_400_000);
+  const before = new Date(Date.now() - 2 * days * 86_400_000);
+  const labels = lastDays(days);
+  const inPeriod = { ...OWN, createdAt: { gte: since } };
 
-  // Bucket conversations per day for the bar chart.
-  const buckets = new Map<string, number>();
-  for (let i = DAYS - 1; i >= 0; i--) {
-    const day = new Date();
-    day.setDate(day.getDate() - i);
-    buckets.set(day.toISOString().slice(0, 10), 0);
-  }
-  for (const conversation of trends.conversations) {
-    const key = conversation.createdAt.toISOString().slice(0, 10);
-    if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
-  }
-  const series = Array.from(buckets.entries());
-  const peak = Math.max(1, ...series.map(([, count]) => count));
+  const { data, error } = await safeQuery(
+    async () => {
+      const [
+        leads, previousLeads, won, lost, quotes, ticketsRaised, ticketsResolved, resolution, leadsDaily, ticketsDaily, webDaily, whatsappDaily,
+        bySource, byCategory, byStage, ticketsByCategory, ticketsByStatus, quotesByStatus, workload,
+      ] = await Promise.all([
+        prisma.lead.count({ where: inPeriod }),
+        prisma.lead.count({ where: { ...OWN, createdAt: { gte: before, lt: since } } }),
+        prisma.lead.aggregate({ where: { ...OWN, stage: "WON", updatedAt: { gte: since } }, _count: true, _sum: { estimatedValue: true } }),
+        prisma.lead.count({ where: { ...OWN, stage: "LOST", updatedAt: { gte: since } } }),
+        prisma.quote.count({ where: inPeriod }),
+        prisma.ticket.count({ where: inPeriod }),
+        prisma.ticket.count({ where: { ...OWN, resolvedAt: { gte: since } } }),
+        prisma.$queryRaw<Array<{ avg: number | null }>>`
+          SELECT avg(extract(epoch FROM ("resolvedAt" - "createdAt")) / 3600)::float AS avg
+          FROM tickets WHERE "department"::text = ${DEPARTMENT} AND "resolvedAt" >= ${since.toISOString()}::timestamp`,
+        perDay("leads", days),
+        perDay("tickets", days),
+        perDay("conversations", days, Prisma.sql`channel = 'WEB'`),
+        perDay("conversations", days, Prisma.sql`channel = 'WHATSAPP'`),
+        prisma.lead.groupBy({ by: ["source"], where: inPeriod, _count: true }),
+        prisma.lead.groupBy({ by: ["subService"], where: { ...inPeriod, subService: { not: null } }, _count: true, orderBy: { _count: { subService: "desc" } }, take: 8 }),
+        prisma.lead.groupBy({ by: ["stage"], where: inPeriod, _count: true }),
+        prisma.ticket.groupBy({ by: ["category"], where: inPeriod, _count: true }),
+        prisma.ticket.groupBy({ by: ["status"], where: inPeriod, _count: true }),
+        prisma.quote.groupBy({ by: ["status"], where: inPeriod, _count: true }),
+        prisma.$queryRaw<Array<{ id: string; name: string; open: bigint; resolved: bigint; avg: number | null }>>`
+          SELECT u.id, u.name,
+            count(*) FILTER (WHERE t.status IN ('OPEN','ASSIGNED','IN_PROGRESS','WAITING_CUSTOMER','TECHNICIAN_DISPATCHED')) AS open,
+            count(*) FILTER (WHERE t."resolvedAt" >= ${since.toISOString()}::timestamp) AS resolved,
+            (avg(extract(epoch FROM (t."resolvedAt" - t."createdAt")) / 3600) FILTER (WHERE t."resolvedAt" >= ${since.toISOString()}::timestamp))::float AS avg
+          FROM tickets t JOIN users u ON u.id = t."assigneeId"
+          WHERE t."department"::text = ${DEPARTMENT}
+          GROUP BY u.id, u.name
+          ORDER BY open DESC, resolved DESC
+          LIMIT 20`,
+      ]);
+      return {
+        leads, previousLeads, won, lost, quotes, ticketsRaised, ticketsResolved, resolution: resolution[0]?.avg ?? null, leadsDaily, ticketsDaily, webDaily,
+        whatsappDaily, bySource, byCategory, byStage, ticketsByCategory, ticketsByStatus, quotesByStatus, workload,
+      };
+    },
+    null
+  );
+
+  const decided = (data?.won._count ?? 0) + (data?.lost ?? 0);
+  const winRate = decided ? Math.round(((data?.won._count ?? 0) / decided) * 100) : null;
+  const stageCounts = new Map((data?.byStage ?? []).map((entry) => [entry.stage, entry._count]));
+  const canExportLeads = hasPermission(staff, "leads.view");
+  const canExportTickets = hasPermission(staff, "tickets.view");
 
   return (
     <>
       <PageHeader
         eyebrow="Insights"
-        title="Reports & Analytics"
-        description={`Performance across the last ${DAYS} days.`}
+        title="Reports"
+        description="Enquiries, sales results, service performance and conversations over a period. All figures come from the records in the console."
+        actions={
+          <>
+            {canExportLeads && (
+              <a href={`/api/admin/reports/export?type=leads&days=${days}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                <Download /> Leads CSV
+              </a>
+            )}
+            {canExportTickets && (
+              <a href={`/api/admin/reports/export?type=tickets&days=${days}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                <Download /> Tickets CSV
+              </a>
+            )}
+          </>
+        }
       />
+      <DbNotice error={error ?? undefined} />
+      <FilterBar>
+        {RANGES.map((range) => (
+          <FilterChip key={range} href={`/admin/reports?days=${range}`} label={`Last ${range} days`} active={days === range} />
+        ))}
+      </FilterBar>
 
-      {(statsError || trendError) && <DbNotice error={statsError ?? trendError} />}
-
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Enquiries" value={data?.leads ?? 0} hint={delta(data?.leads ?? 0, data?.previousLeads ?? 0) ?? "None in the previous period either"} />
+        <StatCard label="Quote requests" value={data?.quotes ?? 0} />
         <StatCard
-          label="Conversations"
-          value={trends.conversations.length}
-          hint={`Last ${DAYS} days`}
-          icon={MessagesSquare}
+          label="Won"
+          value={data?.won._count ?? 0}
+          hint={`${winRate === null ? "No decided leads" : `${winRate}% of decided leads`}${data?.won._sum.estimatedValue ? ` · ${formatPkr(Number(data.won._sum.estimatedValue))}` : ""}`}
         />
-        <StatCard
-          label="Win rate"
-          value={`${stats.conversionRate}%`}
-          hint="Won ÷ all leads"
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="Avg response time"
-          value={trends.avgLatency ? `${(trends.avgLatency / 1000).toFixed(1)}s` : "—"}
-          hint="Assistant first-to-last token"
-          icon={Timer}
-        />
-        <StatCard
-          label="Satisfaction"
-          value={stats.satisfaction ? `${stats.satisfaction.toFixed(1)} / 5` : "—"}
-          icon={Percent}
-        />
+        <StatCard label="Tickets raised" value={data?.ticketsRaised ?? 0} hint={`${data?.ticketsResolved ?? 0} resolved · average ${hours(data?.resolution ?? null)} to resolve`} />
       </div>
 
-      <Card className="mb-6 p-6">
-        <h2 className="mb-5 text-sm font-semibold">Conversations per day</h2>
-        <div className="flex h-36 items-end gap-[3px]">
-          {series.map(([date, count]) => (
-            <div
-              key={date}
-              title={`${date}: ${count}`}
-              className="bg-brand flex-1 rounded-t opacity-75 transition-opacity hover:opacity-100"
-              style={{ height: `${Math.max(2, (count / peak) * 100)}%` }}
-            />
-          ))}
-        </div>
-        <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-          <span>{series[0]?.[0]}</span>
-          <span>{series[series.length - 1]?.[0]}</span>
-        </div>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <Breakdown
-          title="Sales pipeline"
-          rows={trends.leadStages.map((r) => ({ label: r.stage, count: r._count._all }))}
-        />
-        <Breakdown
-          title="Lead sources"
-          rows={trends.leadSources.map((r) => ({ label: r.source, count: r._count._all }))}
-        />
-        <Breakdown
-          title="Most requested services"
-          rows={stats.popularServices.map((r) => ({
-            label: r.label,
-            count: r.count,
-          }))}
-        />
-        <Breakdown
-          title="Support tickets"
-          rows={trends.ticketStatuses.map((r) => ({ label: r.status, count: r._count._all }))}
-        />
+      <div className="mb-6 grid gap-6 xl:grid-cols-2">
+        <Section title="Enquiries and tickets per day" description={`Last ${days} days, Pakistan time`}>
+          <TrendChart
+            label={`Enquiries and tickets per day over the last ${days} days`}
+            labels={labels}
+            series={[
+              { name: "Enquiries", values: data?.leadsDaily ?? [], color: "blue" },
+              { name: "Tickets", values: data?.ticketsDaily ?? [], color: "orange" },
+            ]}
+          />
+        </Section>
+        <Section title="Conversations per day" description={`${sum(data?.webDaily ?? [])} on the website · ${sum(data?.whatsappDaily ?? [])} on WhatsApp`}>
+          <TrendChart
+            label={`Website and WhatsApp conversations per day over the last ${days} days`}
+            labels={labels}
+            series={[
+              { name: "Website", values: data?.webDaily ?? [], color: "blue" },
+              { name: "WhatsApp", values: data?.whatsappDaily ?? [], color: "orange" },
+            ]}
+          />
+        </Section>
       </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <Section title="Where enquiries came from">
+          <BarList label="Enquiries by source" unit="enquiries" rows={(data?.bySource ?? []).map((entry) => ({ label: SOURCE_LABEL[entry.source] ?? entry.source, value: entry._count })).sort((a, b) => b.value - a.value)} />
+        </Section>
+        <Section title="What customers asked for">
+          <BarList label="Enquiries by product or service" unit="enquiries" rows={(data?.byCategory ?? []).map((entry) => ({ label: entry.subService ?? "—", value: entry._count }))} />
+        </Section>
+        <Section title="Where this period's enquiries are now">
+          <BarList label="Enquiries by current stage" unit="enquiries" rows={PIPELINE_STAGES.map((stage) => ({ label: STAGE_LABEL[stage], value: stageCounts.get(stage) ?? 0 }))} />
+        </Section>
+        <Section title="Tickets by type">
+          <BarList label="Tickets by type" unit="tickets" rows={(data?.ticketsByCategory ?? []).map((entry) => ({ label: TICKET_CATEGORY_LABEL[entry.category] ?? entry.category, value: entry._count })).sort((a, b) => b.value - a.value)} />
+        </Section>
+        <Section title="Tickets by status">
+          <BarList label="Tickets by status" unit="tickets" rows={(data?.ticketsByStatus ?? []).map((entry) => ({ label: TICKET_STATUS_LABEL[entry.status] ?? entry.status, value: entry._count }))} />
+        </Section>
+        <Section title="Quote requests by status">
+          <BarList label="Quote requests by status" unit="quotes" rows={(data?.quotesByStatus ?? []).map((entry) => ({ label: QUOTE_STATUS_LABEL[entry.status] ?? entry.status, value: entry._count }))} />
+        </Section>
+      </div>
+
+      <Section title="Service workload" description="Tickets held by each person, and how quickly they resolved them in this period." bodyClassName="p-0">
+        <DataTable
+          rows={data?.workload ?? []}
+          rowKey={(row) => row.id}
+          empty="No tickets are assigned yet."
+          minWidth={520}
+          columns={[
+            { header: "Person", cell: (row) => <span className="font-medium">{row.name}</span> },
+            { header: "Open tickets", cell: (row) => <span className="tabular-nums">{Number(row.open)}</span>, className: "text-right" },
+            { header: "Resolved in period", cell: (row) => <span className="tabular-nums">{Number(row.resolved)}</span>, className: "text-right" },
+            { header: "Average time to resolve", cell: (row) => hours(row.avg), className: "text-right" },
+          ]}
+        />
+      </Section>
     </>
-  );
-}
-
-function Breakdown({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: Array<{ label: string; count: number }>;
-}) {
-  const total = rows.reduce((sum, row) => sum + row.count, 0) || 1;
-
-  return (
-    <Card className="p-6">
-      <h2 className="mb-4 text-sm font-semibold">{title}</h2>
-      {rows.length ? (
-        <ul className="space-y-3">
-          {rows.map((row) => (
-            <li key={row.label}>
-              <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
-                <span className="truncate">{humanise(row.label)}</span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">
-                  {row.count} · {Math.round((row.count / total) * 100)}%
-                </span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="bg-brand h-full rounded-full"
-                  style={{ width: `${(row.count / total) * 100}%` }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">No data yet.</p>
-      )}
-    </Card>
   );
 }

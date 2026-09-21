@@ -1,108 +1,96 @@
-import { prisma } from "@/lib/db";
+import Link from "next/link";
+import { CheckCircle2, CircleDashed, XCircle } from "lucide-react";
 import { requirePagePermission } from "@/lib/staff";
-import { OWN, safeQuery } from "@/lib/admin/queries";
-import { Callout, DbNotice, EmptyState, PageHeader } from "@/components/admin/ui";
-import { Card } from "@/components/ui/card";
+import { safeQuery } from "@/lib/admin/queries";
+import { getCompanyProfile, EMPTY_COMPANY_PROFILE, hasContact } from "@/lib/company";
+import { integrationStatus } from "@/lib/admin/integrations";
 import { BRAND } from "@/config/brand";
-import { formatDateTime, humanise } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
+import { Callout, DbNotice, LinkTabs, PageHeader } from "@/components/admin/ui";
+import { CompanyProfileForm } from "@/components/admin/CompanyProfileForm";
 
 export const metadata = { title: "Settings" };
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   await requirePagePermission("settings.manage", "/admin/settings");
-
-  const { data, error } = await safeQuery(
-    () =>
-      prisma.setting.findMany({
-        where: { ...OWN, NOT: { key: { startsWith: "bot." } } },
-        orderBy: [{ group: "asc" }, { key: "asc" }],
-      }),
-    []
-  );
-
-  const groups = Array.from(new Set(data.map((setting) => setting.group)));
+  const { tab } = await searchParams;
+  const integrations = tab === "integrations";
+  const { data: profile, error } = await safeQuery(() => getCompanyProfile({ fresh: true }), EMPTY_COMPANY_PROFILE);
 
   return (
     <>
-      <PageHeader
-        eyebrow="Administration"
-        title="Settings"
-        description="Branding, company details and behaviour. Secrets live in environment variables, not here."
+      <PageHeader eyebrow="Administration" title="Settings" description="Company details customers see, and the state of each integration. Secrets are set as environment variables on the server, never here." />
+      <DbNotice error={error} />
+      <LinkTabs
+        active={integrations ? "integrations" : "company"}
+        tabs={[
+          { key: "company", label: "Company profile", href: "/admin/settings" },
+          { key: "integrations", label: "Integrations", href: "/admin/settings?tab=integrations" },
+        ]}
       />
 
-      {error && <DbNotice error={error} />}
-
-      {/* Brand identity summary — what the assistant currently tells people. */}
-      <Card className="dark brand-gradient mb-6 overflow-hidden border-white/[0.06] p-6 text-foreground">
-        <p className="eyebrow">Brand identity</p>
-        <h2 className="mt-3 text-xl font-bold tracking-tight text-white">{BRAND.name}</h2>
-        <p className="mt-1 text-sm text-white/60">{BRAND.tagline}</p>
-
-        <dl className="mt-6 grid gap-x-8 gap-y-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-          <Row label="Reference prefix" value={BRAND.referencePrefix} />
-        </dl>
-      </Card>
-
-      <Callout title="Where these values come from">
-        These are the defaults in <code>src/config/brand.ts</code>. The WhatsApp assistant and the
-        website chat use the contact details, hours and prices from{" "}
-        <a href="/admin/chatbot/contact" className="font-semibold text-primary hover:underline">
-          Chatbot Studio
-        </a>
-        , which start from these values and can be changed there without a deploy. The assistant
-        never gives contact information beyond those values.
-      </Callout>
-
-      <h2 className="mb-3 mt-8 text-sm font-semibold">Stored settings</h2>
-      {data.length ? (
-        <div className="space-y-6">
-          {groups.map((group) => (
-            <section key={group}>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {humanise(group)}
-              </h3>
-              <div className="grid gap-3 md:grid-cols-2">
-                {data
-                  .filter((setting) => setting.group === group)
-                  .map((setting) => (
-                    <Card key={setting.id} className="p-4">
-                      <p className="mb-1.5 font-mono text-xs font-medium">{setting.key}</p>
-                      {setting.description && (
-                        <p className="mb-2 text-xs text-muted-foreground">
-                          {setting.description}
-                        </p>
-                      )}
-                      <pre className="scroll-slim overflow-x-auto rounded-lg bg-secondary/60 p-2.5 text-[11px] leading-relaxed">
-                        {setting.isSecret
-                          ? "•••••••• (write-only)"
-                          : JSON.stringify(setting.value, null, 2)}
-                      </pre>
-                      <p className="mt-2 text-[10px] text-muted-foreground">
-                        Updated {formatDateTime(setting.updatedAt)}
-                      </p>
-                    </Card>
+      {integrations ? (
+        <div className="space-y-3">
+          {integrationStatus().map((item) => (
+            <Card key={item.name} className="flex items-start gap-3 p-4">
+              {item.state === "ready" ? (
+                <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" aria-label="Configured" />
+              ) : item.state === "missing" ? (
+                <XCircle className="mt-0.5 size-5 shrink-0 text-rose-600" aria-label="Not configured" />
+              ) : (
+                <CircleDashed className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-label="Optional, not configured" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{item.name}</p>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">{item.detail}</p>
+                <p className="mt-1.5 flex flex-wrap gap-1">
+                  {item.env.map((name) => (
+                    <code key={name} className="rounded bg-secondary px-1.5 py-0.5 text-[11px]">
+                      {name}
+                    </code>
                   ))}
+                </p>
               </div>
-            </section>
+            </Card>
           ))}
+          <p className="pt-2 text-xs text-muted-foreground">
+            Assistant behaviour — menus, flows, business hours, teams and wording — is edited in <Link href="/admin/chatbot" className="text-primary hover:underline">Chatbot Studio</Link>.
+          </p>
         </div>
       ) : (
-        <EmptyState
-          message="No stored settings."
-          hint="Run `npm run db:seed` to create the default branding, company and behaviour settings."
-        />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0">
+            {!hasContact(profile) && (
+              <div className="mb-6">
+                <Callout title="No contact details yet" tone="warning">
+                  Until a phone number, WhatsApp number or email is entered, the website and the assistant offer a callback request instead of contact details.
+                </Callout>
+              </div>
+            )}
+            <CompanyProfileForm initial={profile} />
+          </div>
+          <Card className="h-fit bg-brand-ink p-5 text-white">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-sky">Brand</p>
+            <p className="mt-2 text-lg font-bold">{BRAND.name}</p>
+            <p className="text-sm text-white/65">{BRAND.tagline}</p>
+            <dl className="mt-4 space-y-2 text-[13px]">
+              <div>
+                <dt className="text-white/50">Assistant</dt>
+                <dd>{BRAND.assistant.name}</dd>
+              </div>
+              <div>
+                <dt className="text-white/50">Console</dt>
+                <dd>{BRAND.console.name}</dd>
+              </div>
+              <div>
+                <dt className="text-white/50">Serving</dt>
+                <dd>{BRAND.serviceArea}</dd>
+              </div>
+            </dl>
+            <p className="mt-4 text-[11px] leading-relaxed text-white/50">The name, colours and wording are set in the code (src/config/brand.ts) so every surface stays consistent.</p>
+          </Card>
+        </div>
       )}
     </>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 border-l border-white/10 pl-3">
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-        {label}
-      </dt>
-      <dd className="mt-1 break-words font-medium text-white/85">{value}</dd>
-    </div>
   );
 }

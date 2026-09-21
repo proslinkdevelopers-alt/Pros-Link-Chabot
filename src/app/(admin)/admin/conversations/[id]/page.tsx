@@ -1,275 +1,241 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { ChannelBadge, PageHeader } from "@/components/admin/ui";
+import { Paperclip } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requirePagePermission } from "@/lib/staff";
-import { isOwn, safeQuery } from "@/lib/admin/queries";
+import { hasPermission, requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
+import { peopleWith } from "@/lib/admin/people";
+import { activityTimeline } from "@/lib/admin/timeline";
 import { readCapture } from "@/lib/capture";
-import {
-  DETAIL_LABELS,
-  MEETING_MODE_LABEL,
-  type CustomerDetails,
-} from "@/lib/ai/customer";
+import { DETAIL_LABELS, MEETING_MODE_LABEL, asCustomerDetails, type CustomerDetails } from "@/lib/ai/customer";
 import { readBotState } from "@/lib/bot/types";
-import { ConversationControls } from "@/components/admin/ConversationControls";
-import { cn, formatDateTime, humanise, isUrduScript } from "@/lib/utils";
+import { QUOTE_STATUS_LABEL, STAGE_LABEL, TICKET_STATUS_LABEL, MEETING_STATUS_LABEL, labelFor } from "@/lib/admin/labels";
+import { Card } from "@/components/ui/card";
+import { ChannelBadge, DbNotice, DetailList, PageHeader, Section, StatusBadge, Timeline } from "@/components/admin/ui";
+import { InlineSelect, NoteComposer } from "@/components/admin/client/controls";
+import { ConvertActions, ReplyBox, TagEditor, ThreadToggles } from "@/components/admin/inbox/InboxControls";
+import { cn, formatDateTime, isUrduScript } from "@/lib/utils";
 
 export const metadata = { title: "Conversation" };
 
-export default async function ConversationDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  await requirePagePermission("conversations.view");
-  const { id } = await params;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-  const { data: conversation } = await safeQuery(
-    () =>
-      prisma.conversation.findUnique({
-        where: { id },
-        include: {
-          messages: { orderBy: { createdAt: "asc" } },
-          tickets: { select: { reference: true, status: true } },
-          leads: { select: { id: true, reference: true } },
-          meetings: { select: { reference: true, status: true } },
-        },
-      }),
-    null
-  );
-
-  // An archived Institute conversation is not part of this console.
-  if (!conversation || !isOwn(conversation.department)) notFound();
-
-  const capture = readCapture(conversation.capture);
-  const { details } = capture;
-  const bot = readBotState(capture.bot);
-
-  // Staff-written messages are shown as such, and the reply box only opens
-  // while WhatsApp's 24-hour window is.
-  const authorIds = Array.from(new Set(conversation.messages.map((m) => m.authorId).filter(Boolean))) as string[];
-  const [{ data: authors }, { data: contact }] = await Promise.all([
-    safeQuery(() => prisma.user.findMany({ where: { id: { in: authorIds } }, select: { id: true, name: true } }), []),
-    safeQuery(
-      () =>
-        conversation.contactPhone
-          ? prisma.whatsappContact.findUnique({
-              where: { waId: conversation.contactPhone.replace(/\D/g, "") },
-              select: { lastInboundAt: true, optedOut: true },
-            })
-          : Promise.resolve(null),
-      null
-    ),
-  ]);
-  const authorName = new Map(authors.map((author) => [author.id, author.name]));
-  const windowOpen = Boolean(contact?.lastInboundAt && Date.now() - contact.lastInboundAt.getTime() < 24 * 60 * 60 * 1000);
-  const learned = DETAIL_LABELS.filter(([key]) => key !== "requirements" && details[key]).map(
-    ([key, label]) => [label, displayDetail(key, details[key] as string)] as const
-  );
-
-  return (
-    <>
-      <Link
-        href="/admin/conversations"
-        className="mb-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
-      >
-        <ArrowLeft className="size-3.5" /> All conversations
-      </Link>
-
-      <PageHeader
-        title={conversation.reference}
-        description={`${conversation.messages.length} messages · started ${formatDateTime(
-          conversation.createdAt
-        )} · language ${conversation.language}`}
-        actions={<ChannelBadge value={conversation.channel} />}
-      />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="scroll-slim max-h-[70dvh] space-y-4 overflow-y-auto p-5 lg:col-span-2">
-          {conversation.messages.map((message) => {
-            const isUser = message.role === "USER";
-            return (
-              <div
-                key={message.id}
-                className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                    isUser
-                      ? "rounded-br-md bg-primary text-primary-foreground"
-                      : "rounded-bl-md bg-secondary text-secondary-foreground"
-                  )}
-                >
-                  <p className={cn("whitespace-pre-wrap", isUrduScript(message.content) && "urdu")}>
-                    {message.content}
-                  </p>
-                  <p
-                    className={cn(
-                      "mt-1 text-[10px]",
-                      isUser ? "text-primary-foreground/70" : "text-muted-foreground"
-                    )}
-                  >
-                    {message.authorId ? `${authorName.get(message.authorId) ?? "Team member"} · ` : ""}
-                    {formatDateTime(message.createdAt)}
-                    {message.latencyMs ? ` · ${message.latencyMs}ms` : ""}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </Card>
-
-        <div className="space-y-4">
-          <Card className="p-5">
-            <h2 className="text-sm font-semibold">Customer details</h2>
-            <p className="mb-3 mt-0.5 text-[11px] text-muted-foreground">
-              What the assistant learned in conversation.
-            </p>
-            {learned.length || details.requirements ? (
-              <>
-                <dl className="space-y-2 text-sm">
-                  {learned.map(([label, value]) => (
-                    <Detail key={label} label={label} value={value} />
-                  ))}
-                </dl>
-                {details.requirements && (
-                  <div className={cn(learned.length > 0 && "mt-3 border-t pt-3")}>
-                    <p className="text-[11px] text-muted-foreground">What they need</p>
-                    <p className="mt-1 text-sm leading-relaxed">{details.requirements}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">Nothing shared yet.</p>
-            )}
-          </Card>
-
-          {conversation.channel === "WHATSAPP" && conversation.contactPhone && (
-            <Card className="p-5">
-              <h2 className="mb-3 text-sm font-semibold">WhatsApp contact</h2>
-              <dl className="space-y-2 text-sm">
-                <Detail label="Name" value={conversation.contactName ?? "Not shared"} />
-                <Detail label="Number" value={conversation.contactPhone} />
-              </dl>
-              {contact?.optedOut && (
-                <p className="mt-2 text-[11px] font-medium text-destructive">Opted out of marketing messages</p>
-              )}
-              <div className="mt-4 border-t pt-4">
-                <ConversationControls
-                  conversationId={conversation.id}
-                  botPaused={conversation.botPaused}
-                  handedOff={conversation.handedOff}
-                  windowOpen={windowOpen}
-                />
-              </div>
-            </Card>
-          )}
-
-          {conversation.channel === "WHATSAPP" && (
-            <Card className="p-5">
-              <h2 className="mb-3 text-sm font-semibold">Assistant</h2>
-              <dl className="space-y-2 text-sm">
-                <Detail label="Source" value={conversation.trafficSource ? humanise(conversation.trafficSource) : "—"} />
-                {conversation.campaign && <Detail label="Campaign" value={conversation.campaign} />}
-                {conversation.adId && <Detail label="Ad ID" value={conversation.adId} />}
-                <Detail label="Intent" value={bot.intent ? humanise(bot.intent) : "—"} />
-                <Detail
-                  label="Lead score"
-                  value={bot.score ? `${bot.score.value}/100 · ${humanise(bot.score.temperature)}` : "—"}
-                />
-                {bot.flow && <Detail label="In progress" value={`${humanise(bot.flow.id)}${bot.flow.pending ? ` → ${humanise(bot.flow.pending)}` : ""}`} />}
-                {bot.signals.enterprise && <Detail label="Enterprise" value="Yes" />}
-                {conversation.handoverTeam && <Detail label="Handed to" value={humanise(conversation.handoverTeam)} />}
-                {bot.handover?.reference && <Detail label="Handover ref" value={bot.handover.reference} />}
-              </dl>
-              {bot.trail.length > 0 && (
-                <p className="mt-3 border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">
-                  {bot.trail.join(" → ")}
-                </p>
-              )}
-            </Card>
-          )}
-
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold">Outcome</h2>
-            <dl className="space-y-2 text-sm">
-              <Detail
-                label="Handed off"
-                value={conversation.handedOff ? "Yes — waiting on a human" : "No"}
-              />
-              <Detail
-                label="Rating"
-                value={conversation.rating ? `${conversation.rating} / 5` : "Not rated"}
-              />
-              <Detail label="Language" value={conversation.language} />
-            </dl>
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold">Records created</h2>
-            <ul className="space-y-1.5 text-xs">
-              {conversation.leads.map((lead) => (
-                <li key={lead.id}>
-                  <Link
-                    href={`/admin/crm/leads/${lead.id}`}
-                    className="font-mono text-primary hover:underline"
-                  >
-                    {lead.reference}
-                  </Link>{" "}
-                  <span className="text-muted-foreground">lead</span>
-                </li>
-              ))}
-              {conversation.meetings.map((meeting) => (
-                <li key={meeting.reference} className="text-muted-foreground">
-                  <Link href="/admin/meetings" className="font-mono text-primary hover:underline">
-                    {meeting.reference}
-                  </Link>{" "}
-                  consultation · {meeting.status}
-                </li>
-              ))}
-              {conversation.tickets.map((ticket) => (
-                <li key={ticket.reference} className="text-muted-foreground">
-                  <span className="font-mono text-foreground">{ticket.reference}</span> ticket ·{" "}
-                  {ticket.status}
-                </li>
-              ))}
-              {!conversation.leads.length &&
-                !conversation.meetings.length &&
-                !conversation.tickets.length && (
-                <li className="text-muted-foreground">Nothing captured from this chat.</li>
-              )}
-            </ul>
-          </Card>
-        </div>
-      </div>
-    </>
-  );
-}
-
-const INTENT_LABEL: Record<string, string> = {
-  // Only the assistant's four engagement values; `topic` intents are humanised.
-  PROJECT: "Start a project",
-  CONSULTATION: "Book a consultation",
-  SUPPORT: "Get support",
-  BROWSING: "Just browsing",
-};
-
-function displayDetail(key: keyof CustomerDetails, value: string): string {
+function detailValue(key: keyof CustomerDetails, value: string): string {
   if (key === "meetingMode") return MEETING_MODE_LABEL[value as keyof typeof MEETING_MODE_LABEL] ?? value;
-  if (key === "intent") return INTENT_LABEL[value] ?? value;
-  if (key === "topic") return humanise(value);
-  if (key === "supportCategory") return value.charAt(0) + value.slice(1).toLowerCase();
+  if (key === "topic" || key === "intent" || key === "supportCategory" || key === "priority") return labelFor(value);
   return value;
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const staff = await requirePagePermission("conversations.view", `/admin/conversations/${id}`);
+  const canReply = hasPermission(staff, "conversations.reply");
+  const canManage = hasPermission(staff, "conversations.manage");
+
+  const { data, error } = await safeQuery(
+    async () => {
+      const conversation = await prisma.conversation.findFirst({
+        where: { id, ...OWN },
+        include: {
+          messages: { orderBy: { createdAt: "asc" }, take: 500 },
+          assignee: { select: { name: true } },
+          customer: { select: { id: true, name: true, company: true, reference: true } },
+          leads: { select: { id: true, reference: true, stage: true } },
+          quotes: { select: { id: true, reference: true, status: true } },
+          tickets: { select: { id: true, reference: true, status: true } },
+          meetings: { select: { id: true, reference: true, status: true } },
+        },
+      });
+      if (!conversation) return null;
+      const authorIds = [...new Set(conversation.messages.map((message) => message.authorId).filter(Boolean))] as string[];
+      const [authors, contact, people, activity] = await Promise.all([
+        prisma.user.findMany({ where: { id: { in: authorIds } }, select: { id: true, name: true } }),
+        conversation.channel === "WHATSAPP" && conversation.contactPhone
+          ? prisma.whatsappContact.findUnique({ where: { waId: conversation.contactPhone.replace(/\D/g, "") }, select: { lastInboundAt: true, optedOut: true } })
+          : null,
+        canManage ? peopleWith(["conversations.reply"]) : Promise.resolve([]),
+        activityTimeline([{ entityType: "Conversation", entityId: id }]),
+      ]);
+      // Opening the thread marks it read for the team.
+      if (canReply && conversation.lastInboundAt && (!conversation.readAt || conversation.readAt < conversation.lastInboundAt)) {
+        await prisma.conversation.update({ where: { id }, data: { readAt: new Date() } });
+      }
+      return { conversation, authors, contact, people, activity };
+    },
+    null
+  );
+  if (!error && !data) notFound();
+  if (!data) return <DbNotice error={error} />;
+
+  const { conversation, contact } = data;
+  const capture = readCapture(conversation.capture);
+  const details = asCustomerDetails(capture.details);
+  const bot = readBotState(capture.bot);
+  const authorName = new Map(data.authors.map((author) => [author.id, author.name]));
+  const lastInbound = contact?.lastInboundAt ?? conversation.lastInboundAt;
+  const windowOpen = conversation.channel === "WEB" || Boolean(lastInbound && Date.now() - lastInbound.getTime() < DAY_MS);
+  const who = conversation.customer?.name || conversation.contactName || details.name || conversation.contactPhone || "Website visitor";
+  const learned = DETAIL_LABELS.filter(([key]) => key !== "requirements" && details[key]).map(([key, label]) => [label, detailValue(key, details[key] as string)] as [string, string]);
+  const canSeeMedia = hasPermission(staff, "conversations.view");
+
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] text-muted-foreground">{label}</dt>
-      <dd className="text-right text-sm font-medium">{value}</dd>
-    </div>
+    <>
+      <PageHeader
+        back={{ href: "/admin/conversations", label: "Conversations" }}
+        eyebrow={conversation.reference}
+        title={who}
+        description={<>Started {formatDateTime(conversation.createdAt)} · {conversation.messages.length} messages{conversation.assignee ? ` · Assigned to ${conversation.assignee.name}` : ""}</>}
+        actions={
+          <>
+            <ChannelBadge value={conversation.channel} />
+            <StatusBadge value={conversation.status} label={conversation.status === "OPEN" ? "Open" : "Closed"} />
+          </>
+        }
+      />
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-4">
+          <ThreadToggles conversationId={conversation.id} botPaused={conversation.botPaused} status={conversation.status} handedOff={conversation.handedOff} canReply={canReply} canManage={canManage} />
+          <Card className="flex max-h-[72dvh] flex-col overflow-hidden p-0">
+            <div className="scroll-slim flex-1 space-y-3 overflow-y-auto bg-secondary/25 p-4" aria-label="Messages">
+              {conversation.messages.map((message) => {
+                const fromCustomer = message.role === "USER";
+                const staffAuthor = message.authorId ? authorName.get(message.authorId) ?? "Team member" : null;
+                return (
+                  <div key={message.id} className={cn("flex", fromCustomer ? "justify-start" : "justify-end")}>
+                    <div
+                      className={cn(
+                        "max-w-[82%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-soft",
+                        fromCustomer ? "rounded-bl-md bg-card" : staffAuthor ? "rounded-br-md bg-brand-navy text-white" : "rounded-br-md bg-primary text-primary-foreground"
+                      )}
+                    >
+                      {message.mediaId && (
+                        canSeeMedia ? (
+                          <a href={`/api/admin/whatsapp/media/${encodeURIComponent(message.mediaId)}`} target="_blank" rel="noreferrer" className="mb-1 inline-flex items-center gap-1 text-xs font-semibold underline">
+                            <Paperclip className="size-3.5" aria-hidden /> {message.mediaType === "image" ? "Photo" : "Attachment"}
+                          </a>
+                        ) : null
+                      )}
+                      <p className={cn("whitespace-pre-wrap break-words", isUrduScript(message.content) && "urdu")}>{message.content}</p>
+                      <p className={cn("mt-1 text-[10px]", fromCustomer ? "text-muted-foreground" : "text-white/70")}>
+                        {fromCustomer ? "Customer" : staffAuthor ?? "Assistant"} · {formatDateTime(message.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+              {!conversation.messages.length && <p className="py-10 text-center text-sm text-muted-foreground">No messages.</p>}
+            </div>
+            <ReplyBox conversationId={conversation.id} channel={conversation.channel} windowOpen={windowOpen} canReply={canReply && conversation.status === "OPEN"} />
+          </Card>
+
+          <Section title="Team notes">
+            {canManage && (
+              <div className="mb-6">
+                <NoteComposer entityType="Conversation" entityId={conversation.id} />
+              </div>
+            )}
+            <Timeline items={data.activity} empty="No notes yet." />
+          </Section>
+        </div>
+
+        <div className="space-y-6">
+          <Section title="Contact">
+            <DetailList
+              items={[
+                ["Name", conversation.contactName ?? details.name],
+                ["Phone", conversation.contactPhone ?? details.phone],
+                ["Customer profile", conversation.customer ? <Link key="c" href={`/admin/customers/${conversation.customer.id}`} className="text-primary hover:underline">{conversation.customer.name} · {conversation.customer.reference}</Link> : null],
+                ["Marketing messages", contact?.optedOut ? <span key="o" className="font-medium text-destructive">Opted out</span> : null],
+              ]}
+            />
+          </Section>
+
+          <Section title="Handling">
+            <div className="space-y-4">
+              <div>
+                <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Assigned to</p>
+                {canManage ? (
+                  <InlineSelect url={`/api/admin/conversations/${conversation.id}`} field="assigneeId" label="Assignee" value={conversation.assigneeId} empty="Unassigned" options={data.people} className="w-full" />
+                ) : (
+                  <p className="text-sm">{conversation.assignee?.name ?? "Unassigned"}</p>
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Tags</p>
+                <TagEditor conversationId={conversation.id} tags={conversation.tags} canEdit={canManage} />
+              </div>
+              {conversation.handedOff && (
+                <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-900">
+                  The assistant handed this conversation to the {conversation.handoverTeam ? labelFor(conversation.handoverTeam).toLowerCase() : ""} team{conversation.handedOffAt ? ` on ${formatDateTime(conversation.handedOffAt)}` : ""}.
+                </p>
+              )}
+            </div>
+          </Section>
+
+          <Section title="Records" description="Created from this conversation.">
+            <ul className="mb-4 space-y-1.5 text-sm">
+              {conversation.leads.map((lead) => (
+                <li key={lead.id} className="flex items-center justify-between gap-2">
+                  <Link href={`/admin/leads/${lead.id}`} className="text-primary hover:underline">Lead {lead.reference}</Link>
+                  <StatusBadge value={lead.stage} label={STAGE_LABEL[lead.stage]} />
+                </li>
+              ))}
+              {conversation.quotes.map((quote) => (
+                <li key={quote.id} className="flex items-center justify-between gap-2">
+                  <Link href={`/admin/quotes/${quote.id}`} className="text-primary hover:underline">Quote {quote.reference}</Link>
+                  <StatusBadge value={quote.status} label={QUOTE_STATUS_LABEL[quote.status]} />
+                </li>
+              ))}
+              {conversation.tickets.map((ticket) => (
+                <li key={ticket.id} className="flex items-center justify-between gap-2">
+                  <Link href={`/admin/tickets/${ticket.id}`} className="text-primary hover:underline">Ticket {ticket.reference}</Link>
+                  <StatusBadge value={ticket.status} label={TICKET_STATUS_LABEL[ticket.status]} />
+                </li>
+              ))}
+              {conversation.meetings.map((meeting) => (
+                <li key={meeting.id} className="flex items-center justify-between gap-2">
+                  <Link href="/admin/appointments" className="text-primary hover:underline">Appointment {meeting.reference}</Link>
+                  <StatusBadge value={meeting.status} label={MEETING_STATUS_LABEL[meeting.status]} />
+                </li>
+              ))}
+              {!conversation.leads.length && !conversation.quotes.length && !conversation.tickets.length && !conversation.meetings.length && (
+                <li className="text-muted-foreground">Nothing yet.</li>
+              )}
+            </ul>
+            <ConvertActions
+              conversationId={conversation.id}
+              can={{ lead: hasPermission(staff, "leads.manage"), quote: hasPermission(staff, "quotes.manage"), ticket: hasPermission(staff, "tickets.manage") }}
+            />
+          </Section>
+
+          <Section title="What the customer shared">
+            {learned.length || details.requirements ? (
+              <>
+                <DetailList items={learned} />
+                {details.requirements && <p className="mt-3 whitespace-pre-line rounded-lg bg-secondary/50 p-3 text-[13px] leading-relaxed">{details.requirements}</p>}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nothing yet.</p>
+            )}
+          </Section>
+
+          <Section title="Assistant">
+            <DetailList
+              items={[
+                ["Topic", bot.intent ? labelFor(bot.intent) : null],
+                ["Lead score", bot.score ? `${bot.score.value}/100 · ${labelFor(bot.score.temperature)}` : null],
+                ["In progress", bot.flow ? `${labelFor(bot.flow.id)}${bot.flow.pending ? ` — waiting for ${labelFor(bot.flow.pending).toLowerCase()}` : ""}` : null],
+                ["Corporate enquiry", bot.signals.enterprise ? "Yes" : null],
+                ["Source", conversation.trafficSource ? labelFor(conversation.trafficSource) : null],
+                ["Campaign", conversation.campaign],
+                ["Language", conversation.language],
+              ]}
+            />
+            {bot.trail.length > 0 && <p className="mt-3 border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">{bot.trail.join(" → ")}</p>}
+          </Section>
+        </div>
+      </div>
+    </>
   );
 }

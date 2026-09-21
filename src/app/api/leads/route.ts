@@ -137,9 +137,9 @@ export async function POST(req: NextRequest) {
       ]
         .filter((line) => line !== null)
         .join("\n"),
-      link: `/admin/crm/leads/${result.leadId}`,
+      link: `/admin/leads/${result.leadId}`,
     });
-    await notifyStaff({ permission: result.quoteReference ? "quotes.manage" : "leads.manage", subject, link: `/admin/crm/leads/${result.leadId}` });
+    await notifyStaff({ permission: result.quoteReference ? "quotes.manage" : "leads.manage", subject, link: `/admin/leads/${result.leadId}` });
     await logEvent({
       action: result.quoteReference ? "quote.requested" : "lead.created",
       entity: "Lead",

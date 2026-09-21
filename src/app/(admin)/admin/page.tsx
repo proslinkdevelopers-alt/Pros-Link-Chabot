@@ -1,222 +1,250 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db";
+import { DEPARTMENT } from "@/config/brand";
+import { hasPermission, requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
+import { delta, lastDays, perDay } from "@/lib/admin/metrics";
 import {
-  ArrowUpRight,
-  Briefcase,
-  CalendarClock,
-  FolderKanban,
-  GaugeCircle,
-  LifeBuoy,
-  MessagesSquare,
-  Star,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { DbNotice, EmptyState, PageHeader, StatCard } from "@/components/admin/ui";
-import { requirePagePermission } from "@/lib/staff";
-import { dashboardStats } from "@/lib/admin/queries";
-import { formatDateTime, formatPkr, humanise } from "@/lib/utils";
+  MEETING_MODE_LABEL,
+  OPEN_STAGES,
+  OPEN_TICKET_STATUSES,
+  PIPELINE_STAGES,
+  PRIORITY_LABEL,
+  SOURCE_LABEL,
+  STAGE_LABEL,
+  TICKET_STATUS_LABEL,
+} from "@/lib/admin/labels";
+import { DbNotice, PageHeader, Section, StatCard, StatusBadge } from "@/components/admin/ui";
+import { BarList, TrendChart } from "@/components/admin/charts";
+import { CompleteButton } from "@/components/admin/client/controls";
+import { formatDate, formatDateTime, formatPkr } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard" };
 
-export default async function AdminDashboard() {
-  const session = await requirePagePermission("dashboard.view");
-  const { data: stats, error } = await dashboardStats();
+const DAYS = 30;
+
+export default async function DashboardPage() {
+  const staff = await requirePagePermission("dashboard.view", "/admin");
+  const may = (permission: Parameters<typeof hasPermission>[1]) => hasPermission(staff, permission);
+  const sales = may("leads.view");
+  const service = may("tickets.view") || may("tickets.view_assigned");
+  const ownTicketsOnly = !may("tickets.view");
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 86_400_000);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const labels = lastDays(DAYS);
+  const ticketScope: Prisma.TicketWhereInput = { ...OWN, ...(ownTicketsOnly ? { assigneeId: staff.id } : {}) };
+
+  const { data, error } = await safeQuery(
+    async () => {
+      const [
+        leadsThisWeek, leadsLastWeek, openQuotes, openTickets, urgentTickets, unread, wonThisMonth, leadsDaily, ticketsDaily, byStage, bySource,
+        latestLeads, attention, appointments, followUps,
+      ] = await Promise.all([
+        sales ? prisma.lead.count({ where: { ...OWN, createdAt: { gte: weekAgo } } }) : 0,
+        sales ? prisma.lead.count({ where: { ...OWN, createdAt: { gte: twoWeeksAgo, lt: weekAgo } } }) : 0,
+        may("quotes.view") ? prisma.quote.count({ where: { ...OWN, status: { in: ["REQUESTED", "DRAFT"] } } }) : 0,
+        service ? prisma.ticket.count({ where: { ...ticketScope, status: { in: [...OPEN_TICKET_STATUSES] } } }) : 0,
+        service ? prisma.ticket.count({ where: { ...ticketScope, status: { in: [...OPEN_TICKET_STATUSES] }, priority: { in: ["URGENT", "HIGH"] } } }) : 0,
+        may("conversations.view")
+          ? prisma.$queryRaw<Array<{ count: bigint }>>`
+              SELECT count(*) AS count FROM conversations WHERE "department"::text = ${DEPARTMENT} AND status = 'OPEN'
+                AND "lastInboundAt" IS NOT NULL AND ("readAt" IS NULL OR "readAt" < "lastInboundAt")`.then((rows) => Number(rows[0]?.count ?? 0))
+          : 0,
+        sales ? prisma.lead.aggregate({ where: { ...OWN, stage: "WON", updatedAt: { gte: monthStart } }, _count: true, _sum: { estimatedValue: true } }) : null,
+        sales ? perDay("leads", DAYS) : [],
+        service ? perDay("tickets", DAYS, ownTicketsOnly ? Prisma.sql`"assigneeId" = ${staff.id}` : undefined) : [],
+        sales ? prisma.lead.groupBy({ by: ["stage"], where: { ...OWN, stage: { in: [...PIPELINE_STAGES] } }, _count: true }) : [],
+        sales ? prisma.lead.groupBy({ by: ["source"], where: { ...OWN, createdAt: { gte: new Date(now.getTime() - DAYS * 86_400_000) } }, _count: true }) : [],
+        sales
+          ? prisma.lead.findMany({
+              where: { ...OWN, stage: { in: [...OPEN_STAGES] } },
+              orderBy: { createdAt: "desc" },
+              take: 6,
+              select: { id: true, name: true, company: true, subService: true, stage: true, createdAt: true },
+            })
+          : [],
+        service
+          ? prisma.ticket.findMany({
+              where: { ...ticketScope, status: { in: [...OPEN_TICKET_STATUSES] } },
+              orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+              take: 6,
+              select: { id: true, reference: true, subject: true, status: true, priority: true, city: true, createdAt: true },
+            })
+          : [],
+        may("appointments.view")
+          ? prisma.meeting.findMany({
+              where: { ...OWN, preferredDate: { gte: new Date(labels.at(-1)! + "T00:00:00Z") }, status: { in: ["REQUESTED", "CONFIRMED", "RESCHEDULED"] } },
+              orderBy: { preferredDate: "asc" },
+              take: 5,
+              select: { id: true, name: true, businessName: true, mode: true, status: true, preferredDate: true, preferredTime: true },
+            })
+          : [],
+        prisma.crmActivity.findMany({
+          where: { department: DEPARTMENT, ownerId: staff.id, type: { in: ["FOLLOW_UP", "REMINDER"] }, completedAt: null, dueAt: { lte: new Date(now.getTime() + 3 * 86_400_000) } },
+          orderBy: { dueAt: "asc" },
+          take: 8,
+          select: { id: true, body: true, dueAt: true, entityType: true, entityId: true },
+        }),
+      ]);
+      return { leadsThisWeek, leadsLastWeek, openQuotes, openTickets, urgentTickets, unread, wonThisMonth, leadsDaily, ticketsDaily, byStage, bySource, latestLeads, attention, appointments, followUps };
+    },
+    null
+  );
+
+  const stageCounts = new Map((data?.byStage ?? []).map((entry) => [entry.stage, entry._count]));
+  const recordHref: Record<string, string> = { Lead: "/admin/leads/", Customer: "/admin/customers/", Ticket: "/admin/tickets/", Quote: "/admin/quotes/", Conversation: "/admin/conversations/" };
+  const trendSeries = [
+    ...(sales ? [{ name: "Enquiries", values: data?.leadsDaily ?? [], color: "blue" as const }] : []),
+    ...(service ? [{ name: ownTicketsOnly ? "My tickets" : "Tickets", values: data?.ticketsDaily ?? [], color: "orange" as const }] : []),
+  ];
 
   return (
     <>
-      <PageHeader
-        eyebrow="BITSOL Marketing"
-        title={`Good to see you, ${session.name.split(" ")[0]}`}
-        description="The live state of the practice — conversations, pipeline, delivery and service, in one view."
-        actions={
-          <Link
-            href="/chat"
-            target="_blank"
-            className="inline-flex items-center gap-1.5 rounded-full border bg-card px-4 py-2 text-xs font-semibold shadow-soft transition hover:border-foreground/20"
-          >
-            Open assistant <ArrowUpRight className="size-3.5" />
-          </Link>
-        }
-      />
+      <PageHeader eyebrow="Pros-Link Admin" title={`Welcome, ${staff.name.split(" ")[0]}`} description="What needs attention today across sales, service and conversations." />
+      <DbNotice error={error ?? undefined} />
 
-      {error && <DbNotice error={error} />}
+      <div className="mb-6 grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(13rem,1fr))]">
+        {sales && <StatCard label="New enquiries · 7 days" value={data?.leadsThisWeek ?? 0} hint={delta(data?.leadsThisWeek ?? 0, data?.leadsLastWeek ?? 0) ?? "None in the previous week either"} href="/admin/leads" />}
+        {may("quotes.view") && <StatCard label="Quotes to prepare" value={data?.openQuotes ?? 0} hint="Requested or in preparation" href="/admin/quotes" />}
+        {service && (
+          <StatCard label={ownTicketsOnly ? "My open tickets" : "Open service & support tickets"} value={data?.openTickets ?? 0} hint={`${data?.urgentTickets ?? 0} urgent or high priority`} href="/admin/tickets" />
+        )}
+        {may("conversations.view") && <StatCard label="Unread conversations" value={data?.unread ?? 0} hint="Customers waiting for a reply" href="/admin/conversations?view=unread" />}
+        {sales && (
+          <StatCard
+            label="Won this month"
+            value={data?.wonThisMonth?._count ?? 0}
+            hint={data?.wonThisMonth?._sum.estimatedValue ? `${formatPkr(Number(data.wonThisMonth._sum.estimatedValue))} estimated` : "Estimated values not entered"}
+            href="/admin/leads?stage=WON"
+          />
+        )}
+      </div>
 
-      {/* Headline figures */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="dark brand-gradient relative overflow-hidden border-white/[0.06] p-6 text-foreground lg:col-span-2">
-          <div className="bg-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-          <div className="relative grid gap-6 sm:grid-cols-3">
-            <Headline
-              label="Won pipeline value"
-              value={formatPkr(stats.revenue)}
-              hint={`${stats.wonLeads} deals won`}
-            />
-            <Headline
-              label="Open pipeline"
-              value={formatPkr(stats.openPipeline)}
-              hint="Estimated value still in play"
-            />
-            <Headline
-              label="Win rate"
-              value={`${stats.conversionRate}%`}
-              hint={`${stats.leads} leads all time`}
-            />
-          </div>
-        </Card>
-
-        <Card className="flex flex-col justify-between p-6">
-          <div className="flex items-center gap-2">
-            <Star className="size-4 text-amber-500" />
-            <h2 className="text-sm font-semibold">Client satisfaction</h2>
-          </div>
-          {stats.satisfaction > 0 ? (
-            <div className="mt-4">
-              <p className="text-4xl font-bold tracking-tight tabular-nums">
-                {stats.satisfaction.toFixed(1)}
-                <span className="text-base font-medium text-muted-foreground"> / 5</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Average rating across rated conversations.
-              </p>
-            </div>
-          ) : (
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              No ratings yet. Ratings are captured at the end of a conversation.
-            </p>
+      {trendSeries.length > 0 && (
+        <div className="mb-6 grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <Section title={`New ${trendSeries.map((entry) => entry.name.toLowerCase()).join(" and ")} per day`} description={`Last ${DAYS} days, Pakistan time`}>
+            <TrendChart labels={labels} series={trendSeries} label={`${trendSeries.map((entry) => entry.name).join(" and ")} per day over the last ${DAYS} days`} />
+          </Section>
+          {sales && (
+            <Section title="Pipeline" description="Leads at each stage now">
+              <BarList
+                label="Leads by pipeline stage"
+                rows={PIPELINE_STAGES.map((stage) => ({ label: STAGE_LABEL[stage], value: stageCounts.get(stage) ?? 0, href: `/admin/leads?stage=${stage}` }))}
+                unit="leads"
+                empty="No leads yet."
+              />
+            </Section>
           )}
-          <Link
-            href="/admin/reports"
-            className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-          >
-            <GaugeCircle className="size-3.5" /> Open full reports
-          </Link>
-        </Card>
-      </div>
+        </div>
+      )}
 
-      {/* Operating widgets */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard
-          label="Chats today"
-          value={stats.todayChats}
-          hint={`${stats.totalConversations} conversations all time`}
-          icon={MessagesSquare}
-          href="/admin/conversations"
-        />
-        <StatCard
-          label="New leads"
-          value={stats.newLeads}
-          hint="Waiting for first contact"
-          icon={Briefcase}
-          href="/admin/crm/leads?stage=NEW"
-        />
-        <StatCard
-          label="Upcoming meetings"
-          value={stats.upcomingMeetings}
-          icon={CalendarClock}
-          href="/admin/meetings"
-        />
-        <StatCard
-          label="Active projects"
-          value={stats.activeProjects}
-          icon={FolderKanban}
-          href="/admin/catalogue/projects"
-        />
-        <StatCard
-          label="Open tickets"
-          value={stats.openTickets}
-          icon={LifeBuoy}
-          href="/admin/support/tickets"
-        />
-      </div>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-5">
-        {/* Demand by service */}
-        <Card className="p-6 lg:col-span-2">
-          <div className="mb-5 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Most requested services</h2>
-            <TrendingUp className="size-4 text-muted-foreground" />
-          </div>
-          <RankedList rows={stats.popularServices} />
-        </Card>
-
-        {/* Activity feed */}
-        <Card className="p-0 lg:col-span-3">
-          <div className="flex items-center justify-between gap-2 border-b px-6 py-4">
-            <h2 className="text-sm font-semibold">Recent activity</h2>
-            <Wallet className="size-4 text-muted-foreground" />
-          </div>
-          {stats.recentActivity.length ? (
-            <ul className="divide-y">
-              {stats.recentActivity.map((entry) => (
-                <li key={entry.id} className="flex items-start gap-3 px-6 py-3.5">
-                  <span
-                    className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand-cyan shadow-glow-cyan"
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{humanise(entry.action)}</p>
-                    {entry.message && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">{entry.message}</p>
-                    )}
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {data?.followUps && data.followUps.length > 0 && (
+          <Section title="My follow-ups" description="Due now or in the next three days">
+            <ul className="divide-y text-sm">
+              {data.followUps.map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <Link href={`${recordHref[item.entityType] ?? "/admin/"}${item.entityId}`} className="line-clamp-2 hover:text-primary hover:underline">
+                      {item.body}
+                    </Link>
+                    <p className={item.dueAt && item.dueAt < now ? "text-xs font-medium text-rose-600" : "text-xs text-muted-foreground"}>
+                      {item.dueAt ? `Due ${formatDateTime(item.dueAt)}` : ""} · {item.entityType.toLowerCase()}
+                    </p>
                   </div>
-                  <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
-                    {formatDateTime(entry.createdAt)}
-                  </span>
+                  <CompleteButton activityId={item.id} />
                 </li>
               ))}
             </ul>
-          ) : (
-            <div className="p-6">
-              <EmptyState
-                message="No activity recorded yet."
-                hint="Leads, tickets, meetings and escalations appear here as they happen."
-              />
-            </div>
-          )}
-        </Card>
-      </div>
-    </>
-  );
-}
+          </Section>
+        )}
 
-function Headline({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">{label}</p>
-      <p className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-white">{value}</p>
-      <p className="mt-1.5 text-xs text-white/55">{hint}</p>
-    </div>
-  );
-}
+        {service && (
+          <Section title={ownTicketsOnly ? "My tickets" : "Tickets needing attention"} actions={<Link href="/admin/tickets" className="text-xs font-medium text-primary hover:underline">All tickets</Link>}>
+            {data?.attention.length ? (
+              <ul className="divide-y text-sm">
+                {data.attention.map((ticket) => (
+                  <li key={ticket.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <Link href={`/admin/tickets/${ticket.id}`} className="block truncate font-medium hover:text-primary hover:underline">
+                        {ticket.subject}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {ticket.reference}
+                        {ticket.city ? ` · ${ticket.city}` : ""} · {formatDate(ticket.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <StatusBadge value={ticket.status} label={TICKET_STATUS_LABEL[ticket.status]} />
+                      {(ticket.priority === "URGENT" || ticket.priority === "HIGH") && <StatusBadge value={ticket.priority} label={PRIORITY_LABEL[ticket.priority]} />}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No open tickets.</p>
+            )}
+          </Section>
+        )}
 
-function RankedList({ rows }: { rows: Array<{ label: string; count: number }> }) {
-  if (!rows.length) {
-    return <p className="text-xs text-muted-foreground">No service requests captured yet.</p>;
-  }
+        {sales && (
+          <Section title="Latest open leads" actions={<Link href="/admin/leads" className="text-xs font-medium text-primary hover:underline">All leads</Link>}>
+            {data?.latestLeads.length ? (
+              <ul className="divide-y text-sm">
+                {data.latestLeads.map((lead) => (
+                  <li key={lead.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <Link href={`/admin/leads/${lead.id}`} className="block truncate font-medium hover:text-primary hover:underline">
+                        {lead.company ? `${lead.name} · ${lead.company}` : lead.name}
+                      </Link>
+                      <p className="truncate text-xs text-muted-foreground">{lead.subService ?? "General enquiry"} · {formatDate(lead.createdAt)}</p>
+                    </div>
+                    <StatusBadge value={lead.stage} label={STAGE_LABEL[lead.stage]} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No open leads.</p>
+            )}
+          </Section>
+        )}
 
-  const max = Math.max(1, ...rows.map((r) => r.count));
-
-  return (
-    <ul className="space-y-4">
-      {rows.map((row) => (
-        <li key={row.label}>
-          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
-            <span className="truncate font-medium">
-              {humanise(row.label)}
-            </span>
-            <span className="shrink-0 font-semibold tabular-nums text-muted-foreground">
-              {row.count}
-            </span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-            <div
-              className="bg-brand h-full rounded-full"
-              style={{ width: `${(row.count / max) * 100}%` }}
+        {sales && (
+          <Section title="Where enquiries come from" description={`Last ${DAYS} days`}>
+            <BarList
+              label="Enquiries by source"
+              rows={(data?.bySource ?? []).map((entry) => ({ label: SOURCE_LABEL[entry.source] ?? entry.source, value: entry._count })).sort((a, b) => b.value - a.value)}
+              unit="enquiries"
+              empty="No enquiries in this period."
             />
-          </div>
-        </li>
-      ))}
-    </ul>
+          </Section>
+        )}
+
+        {data?.appointments && data.appointments.length > 0 && (
+          <Section title="Upcoming appointments" actions={<Link href="/admin/appointments" className="text-xs font-medium text-primary hover:underline">All</Link>}>
+            <ul className="divide-y text-sm">
+              {data.appointments.map((meeting) => (
+                <li key={meeting.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{meeting.businessName ? `${meeting.name} · ${meeting.businessName}` : meeting.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(meeting.preferredDate)} {meeting.preferredTime} · {MEETING_MODE_LABEL[meeting.mode] ?? meeting.mode}
+                    </p>
+                  </div>
+                  <StatusBadge value={meeting.status} />
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+      </div>
+
+      {!sales && !service && !may("conversations.view") && (
+        <p className="text-sm text-muted-foreground">Use the menu to open the parts of the console your role covers.</p>
+      )}
+    </>
   );
 }

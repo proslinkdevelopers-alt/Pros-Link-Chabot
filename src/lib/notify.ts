@@ -29,7 +29,7 @@ import { ROLE_PERMISSIONS, STAFF_ROLES, type Permission } from "./permissions";
 export interface TeamNotification {
   subject: string;
   body: string;
-  /** Deep link into the console, e.g. `/admin/crm/leads/<id>`. */
+  /** Deep link into the console, e.g. `/admin/leads/<id>`. */
   link?: string;
   channel?: NotificationChannel;
   /** Team inboxes from the chatbot configuration; omitted, the sales inbox. */

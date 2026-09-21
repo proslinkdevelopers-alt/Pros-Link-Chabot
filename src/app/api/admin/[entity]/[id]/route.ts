@@ -6,8 +6,18 @@ import { DEPARTMENT } from "@/config/brand";
 import { hasPermission, requireApiStaff, type Staff } from "@/lib/staff";
 import { can, type Permission } from "@/lib/permissions";
 import { audit, notifyStaff } from "@/lib/notify";
-import { invalidateKnowledge } from "@/lib/ai/knowledge";
-import { humanise } from "@/lib/utils";
+import {
+  CUSTOMER_STATUSES,
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  MEETING_STATUSES,
+  PRIORITIES,
+  QUOTE_STATUSES,
+  TICKET_CATEGORIES,
+  TICKET_STATUSES,
+  labelFor,
+} from "@/lib/admin/labels";
+import { dateField, money, optionalEmail, optionalPhone, phoneField, recordId, text } from "@/lib/admin/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,94 +27,175 @@ export const dynamic = "force-dynamic";
  *  Record updates from the console
  * =============================================================================
  *
- *  One PATCH endpoint for the console's inline controls — stage, status,
- *  priority, assignment. Safety comes from explicit allow-lists, not the URL:
+ *  One PATCH endpoint for leads, customers, tickets, quotes and appointments —
+ *  inline controls (stage, status, assignment) and full detail edits alike.
+ *  Safety comes from explicit allow-lists, not the URL:
  *
  *   • only the entities below are reachable, each with its own Zod schema, so
  *     no arbitrary field can be written;
- *   • each needs its own permission, checked against the role in the database;
+ *   • each needs its own permission, checked against the role in the database,
+ *     before the record is even looked up;
  *   • a technician may update only tickets assigned to them, and only the
  *     status and resolution;
  *   • an assignee must be an active member of this tenant whose role can work
- *     that kind of record;
+ *     that kind of record, and linked catalogue records must be this tenant's;
  *   • the record must belong to this tenant, even when addressed by id;
- *   • every change is audited with its previous and new values, and the new
- *     assignee is notified.
+ *   • every change is audited with its previous and new values; stage, status
+ *     and assignment changes go on the record's timeline, and the people
+ *     involved are notified.
  * =============================================================================
  */
 
-const PRIORITY = z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]);
-const id = z.string().min(1).max(64);
+const PRIORITY = z.enum(PRIORITIES);
 
 const leadSchema = z
   .object({
-    stage: z.enum([
-      "NEW", "CONTACTED", "QUALIFIED", "QUOTE_REQUESTED", "QUOTED", "NEGOTIATION", "WON", "LOST", "SPAM", "OPTED_OUT",
-    ]),
+    stage: z.enum(LEAD_STAGES),
     priority: PRIORITY,
-    estimatedValue: z.number().nonnegative().max(9_999_999_999).nullable(),
-    lostReason: z.string().trim().max(500).nullable(),
-    nextAction: z.string().trim().max(300).nullable(),
-    ownerId: id.nullable(),
+    estimatedValue: money.nullable(),
+    lostReason: text(500),
+    nextAction: text(300),
+    ownerId: recordId.nullable(),
+    name: z.string().trim().min(2).max(120),
+    company: text(160),
+    phone: phoneField,
+    whatsapp: optionalPhone,
+    email: optionalEmail,
+    city: text(80),
+    businessType: text(80),
+    productCategoryId: recordId.nullable(),
+    productId: recordId.nullable(),
+    quantity: text(60),
+    budget: text(80),
+    timeline: text(80),
+    preferredContact: text(40),
+    requirements: z.string().trim().min(1).max(4000),
+    source: z.enum(LEAD_SOURCES),
   })
   .partial()
   .strict();
 
-const TICKET_STATUS = z.enum([
-  "OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_CUSTOMER", "TECHNICIAN_DISPATCHED", "RESOLVED", "CLOSED",
-]);
+const customerSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    company: text(160),
+    phone: phoneField,
+    whatsapp: optionalPhone,
+    email: optionalEmail,
+    address: text(300),
+    city: text(80),
+    industry: text(80),
+    notes: text(4000),
+    status: z.enum(CUSTOMER_STATUSES),
+    source: z.enum(LEAD_SOURCES).nullable(),
+    ownerId: recordId.nullable(),
+  })
+  .partial()
+  .strict();
+
+const TICKET_STATUS = z.enum(TICKET_STATUSES);
 
 const ticketSchema = z
   .object({
     status: TICKET_STATUS,
     priority: PRIORITY,
-    resolution: z.string().trim().max(4000).nullable(),
-    assigneeId: id.nullable(),
+    category: z.enum(TICKET_CATEGORIES),
+    resolution: text(4000),
+    assigneeId: recordId.nullable(),
+    subject: z.string().trim().min(3).max(160),
+    description: z.string().trim().min(1).max(4000),
+    contactName: text(120),
+    contactPhone: optionalPhone,
+    contactEmail: optionalEmail,
+    company: text(160),
+    city: text(80),
+    address: text(300),
+    machineType: text(80),
+    machineBrand: text(60),
+    machineModel: text(80),
+    serialNumber: text(60),
+    productId: recordId.nullable(),
+    preferredDate: dateField,
+    preferredTime: text(60),
   })
   .partial()
   .strict();
 
 /** What a technician may change on a ticket assigned to them. */
 const technicianTicketSchema = z
-  .object({ status: TICKET_STATUS.exclude(["OPEN", "ASSIGNED"]), resolution: z.string().trim().max(4000).nullable() })
+  .object({ status: TICKET_STATUS.exclude(["OPEN", "ASSIGNED"]), resolution: text(4000) })
   .partial()
   .strict();
 
+const quoteItem = z.object({
+  description: z.string().trim().min(1, "Describe the item.").max(300),
+  quantity: z.coerce.number().positive().max(100_000),
+  unitPrice: money,
+});
+
 const quoteSchema = z
   .object({
-    status: z.enum(["REQUESTED", "DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"]),
-    ownerId: id.nullable(),
-    notes: z.string().trim().max(4000).nullable(),
-    total: z.number().nonnegative().max(9_999_999_999),
+    status: z.enum(QUOTE_STATUSES),
+    ownerId: recordId.nullable(),
+    title: z.string().trim().min(2).max(180),
+    notes: text(4000),
+    items: z.array(quoteItem).max(50),
+    discount: money,
+    tax: money,
+    total: money,
+    currency: z.enum(["PKR", "USD"]),
+    validUntil: dateField,
+    quantity: text(60),
+    requirements: text(4000),
+    budget: text(80),
+    preferredContact: text(40),
+    city: text(80),
+    productCategoryId: recordId.nullable(),
+    productId: recordId.nullable(),
   })
   .partial()
   .strict();
 
 const meetingSchema = z
   .object({
-    status: z.enum(["REQUESTED", "CONFIRMED", "RESCHEDULED", "COMPLETED", "CANCELLED", "NO_SHOW"]),
-    meetingLink: z.string().url().max(500).or(z.literal("")),
+    status: z.enum(MEETING_STATUSES),
+    meetingLink: z.union([z.string().trim().url().max(500), z.literal("")]),
     notes: z.string().max(2000),
+    hostId: recordId.nullable(),
+    preferredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).transform((value) => new Date(`${value}T00:00:00Z`)),
+    preferredTime: z.string().trim().min(1).max(60),
+    mode: z.enum(["SITE_VISIT", "PHONE_CALL", "WHATSAPP", "OFFICE", "ZOOM", "GOOGLE_MEET"]),
   })
   .partial()
   .strict();
-
-const knowledgeSchema = z.object({ state: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]) }).partial().strict();
 
 type Row = Record<string, unknown>;
 
 interface Handler {
   permission: Permission;
   schema: z.ZodTypeAny;
-  entity: string;
-  /** The record in this tenant, with the fields an update can change. */
+  entity: "Lead" | "Customer" | "Ticket" | "Quote" | "Meeting";
   load: (id: string) => Promise<Row | null>;
   update: (id: string, data: Row, before: Row) => Promise<unknown>;
-  /** Console link for notifications. */
   link: (id: string) => string;
   label: (row: Row) => string;
-  /** Field holding the person responsible, and the permission they need. */
+  /** Field holding the person responsible, and the permissions any of which they need. */
   assignee?: { field: string; needs: Permission[] };
+  /** The field whose changes go on the timeline as stage or status changes. */
+  statusField?: string;
+}
+
+/** The catalogue records a lead, quote or ticket points at, when they are this tenant's. */
+async function catalogueNames(data: Row): Promise<{ problem?: string; category?: string | null; product?: string | null }> {
+  const categoryId = data.productCategoryId as string | null | undefined;
+  const productId = data.productId as string | null | undefined;
+  const [category, product] = await Promise.all([
+    categoryId ? prisma.productCategory.findFirst({ where: { id: categoryId, department: DEPARTMENT }, select: { name: true } }) : null,
+    productId ? prisma.product.findFirst({ where: { id: productId, department: DEPARTMENT }, select: { name: true } }) : null,
+  ]);
+  if (categoryId && !category) return { problem: "Choose a category from the list." };
+  if (productId && !product) return { problem: "Choose a product from the list." };
+  return { category: category?.name ?? null, product: product?.name ?? null };
 }
 
 const HANDLERS: Record<string, Handler> = {
@@ -112,13 +203,25 @@ const HANDLERS: Record<string, Handler> = {
     permission: "leads.manage",
     schema: leadSchema,
     entity: "Lead",
+    statusField: "stage",
     load: (id) =>
       prisma.lead.findFirst({
         where: { id, department: DEPARTMENT },
-        select: { reference: true, name: true, stage: true, priority: true, estimatedValue: true, lostReason: true, nextAction: true, ownerId: true, customerId: true },
+        select: {
+          reference: true, name: true, stage: true, priority: true, estimatedValue: true, lostReason: true, nextAction: true, ownerId: true,
+          customerId: true, company: true, phone: true, whatsapp: true, email: true, city: true, businessType: true, productCategoryId: true,
+          productId: true, quantity: true, budget: true, timeline: true, preferredContact: true, requirements: true, source: true, subService: true,
+        },
       }),
     update: async (id, data, before) => {
-      await prisma.lead.update({ where: { id }, data: data as Prisma.LeadUncheckedUpdateInput });
+      const patch: Prisma.LeadUncheckedUpdateInput = { ...(data as Prisma.LeadUncheckedUpdateInput) };
+      if ("productCategoryId" in data || "productId" in data) {
+        const names = await catalogueNames(data);
+        const product = "productId" in data ? names.product : null;
+        const category = "productCategoryId" in data ? names.category : null;
+        if (product || category) patch.subService = product ?? category;
+      }
+      await prisma.lead.update({ where: { id }, data: patch });
       // A won lead makes its customer an active customer.
       if (data.stage === "WON" && before.customerId) {
         await prisma.customer.updateMany({
@@ -127,18 +230,41 @@ const HANDLERS: Record<string, Handler> = {
         });
       }
     },
-    link: (id) => `/admin/crm/leads/${id}`,
+    link: (id) => `/admin/leads/${id}`,
     label: (row) => `lead ${row.reference} (${row.name})`,
     assignee: { field: "ownerId", needs: ["leads.manage"] },
+  },
+  customers: {
+    permission: "customers.manage",
+    schema: customerSchema,
+    entity: "Customer",
+    statusField: "status",
+    load: (id) =>
+      prisma.customer.findFirst({
+        where: { id, department: DEPARTMENT },
+        select: {
+          reference: true, name: true, company: true, phone: true, whatsapp: true, email: true, address: true, city: true, industry: true,
+          notes: true, status: true, source: true, ownerId: true,
+        },
+      }),
+    update: (id, data) => prisma.customer.update({ where: { id }, data: data as Prisma.CustomerUncheckedUpdateInput }),
+    link: (id) => `/admin/customers/${id}`,
+    label: (row) => `customer ${row.name}`,
+    assignee: { field: "ownerId", needs: ["customers.manage"] },
   },
   tickets: {
     permission: "tickets.manage",
     schema: ticketSchema,
     entity: "Ticket",
+    statusField: "status",
     load: (id) =>
       prisma.ticket.findFirst({
         where: { id, department: DEPARTMENT },
-        select: { reference: true, subject: true, status: true, priority: true, resolution: true, assigneeId: true },
+        select: {
+          reference: true, subject: true, status: true, priority: true, category: true, resolution: true, assigneeId: true, description: true,
+          contactName: true, contactPhone: true, contactEmail: true, company: true, city: true, address: true, machineType: true,
+          machineBrand: true, machineModel: true, serialNumber: true, productId: true, preferredDate: true, preferredTime: true, customerId: true,
+        },
       }),
     update: (id, data, before) => {
       const now = new Date();
@@ -151,7 +277,7 @@ const HANDLERS: Record<string, Handler> = {
       if (status === "CLOSED" && before.status !== "CLOSED") patch.closedAt = now;
       return prisma.ticket.update({ where: { id }, data: patch });
     },
-    link: (id) => `/admin/service/tickets/${id}`,
+    link: (id) => `/admin/tickets/${id}`,
     label: (row) => `ticket ${row.reference}`,
     assignee: { field: "assigneeId", needs: ["tickets.manage", "tickets.update_assigned"] },
   },
@@ -159,26 +285,44 @@ const HANDLERS: Record<string, Handler> = {
     permission: "quotes.manage",
     schema: quoteSchema,
     entity: "Quote",
+    statusField: "status",
     load: (id) =>
       prisma.quote.findFirst({
         where: { id, department: DEPARTMENT },
-        select: { reference: true, title: true, status: true, ownerId: true, notes: true, total: true, leadId: true },
+        select: {
+          reference: true, title: true, status: true, ownerId: true, notes: true, items: true, subtotal: true, discount: true, tax: true, total: true,
+          currency: true, validUntil: true, quantity: true, requirements: true, budget: true, preferredContact: true, city: true,
+          productCategoryId: true, productId: true, leadId: true, customerId: true,
+        },
       }),
     update: async (id, data, before) => {
       const now = new Date();
       const patch: Prisma.QuoteUncheckedUpdateInput = { ...(data as Prisma.QuoteUncheckedUpdateInput) };
+      // Totals follow the line items: the team enters the prices, the server does the arithmetic.
+      if (Array.isArray(data.items)) {
+        const items = data.items as Array<{ quantity: number; unitPrice: number }>;
+        const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const discount = Number(data.discount ?? before.discount ?? 0);
+        const tax = Number(data.tax ?? before.tax ?? 0);
+        patch.items = data.items as Prisma.InputJsonValue;
+        patch.subtotal = subtotal;
+        patch.total = Math.max(0, subtotal - discount + tax);
+      }
       if (data.status === "SENT" && before.status !== "SENT") patch.sentAt = now;
       if ((data.status === "ACCEPTED" || data.status === "REJECTED") && before.status !== data.status) patch.decidedAt = now;
       await prisma.quote.update({ where: { id }, data: patch });
-      // Sending the quotation moves its lead along the pipeline.
+      // Sending the quotation moves its lead along the pipeline; an accepted one wins it.
       if (data.status === "SENT" && before.leadId) {
         await prisma.lead.updateMany({
           where: { id: before.leadId as string, department: DEPARTMENT, stage: { in: ["NEW", "CONTACTED", "QUALIFIED", "QUOTE_REQUESTED"] } },
           data: { stage: "QUOTED" },
         });
       }
+      if (data.status === "ACCEPTED" && before.customerId) {
+        await prisma.customer.updateMany({ where: { id: before.customerId as string, department: DEPARTMENT }, data: { status: "ACTIVE", lastInteractionAt: now } });
+      }
     },
-    link: () => `/admin/quotes`,
+    link: (id) => `/admin/quotes/${id}`,
     label: (row) => `quote request ${row.reference}`,
     assignee: { field: "ownerId", needs: ["quotes.manage"] },
   },
@@ -189,41 +333,26 @@ const HANDLERS: Record<string, Handler> = {
     load: (id) =>
       prisma.meeting.findFirst({
         where: { id, department: DEPARTMENT },
-        select: { reference: true, status: true, meetingLink: true, notes: true },
+        select: { reference: true, status: true, meetingLink: true, notes: true, hostId: true, preferredDate: true, preferredTime: true, mode: true },
       }),
-    update: (id, data) =>
+    update: (id, data, before) =>
       prisma.meeting.update({
         where: { id },
-        data: { ...(data as Prisma.MeetingUpdateInput), ...(data.status === "CONFIRMED" ? { confirmedAt: new Date() } : {}) },
+        data: {
+          ...(data as Prisma.MeetingUncheckedUpdateInput),
+          ...(data.status === "CONFIRMED" && before.status !== "CONFIRMED" ? { confirmedAt: new Date() } : {}),
+        },
       }),
     link: () => `/admin/appointments`,
     label: (row) => `appointment ${row.reference}`,
-  },
-  knowledge: {
-    permission: "knowledge.manage",
-    schema: knowledgeSchema,
-    entity: "KnowledgeArticle",
-    load: (id) =>
-      prisma.knowledgeArticle.findFirst({
-        where: { id, department: DEPARTMENT },
-        select: { slug: true, question: true, state: true },
-      }),
-    update: async (id, data) => {
-      await prisma.knowledgeArticle.update({ where: { id }, data: { ...(data as Prisma.KnowledgeArticleUpdateInput), indexedAt: new Date() } });
-      invalidateKnowledge();
-    },
-    link: () => `/admin/knowledge`,
-    label: (row) => `knowledge entry "${row.question}"`,
+    assignee: { field: "hostId", needs: ["appointments.manage"] },
   },
 };
 
 /** Whether the proposed assignee may hold this kind of record. */
 async function validAssignee(userId: string, needs: Permission[]): Promise<boolean> {
-  const user = await prisma.user.findFirst({
-    where: { id: userId, department: DEPARTMENT, isActive: true },
-    select: { role: true },
-  });
-  return Boolean(user && can(user.role, needs));
+  const user = await prisma.user.findFirst({ where: { id: userId, department: DEPARTMENT, isActive: true }, select: { role: true } });
+  return Boolean(user && needs.some((permission) => can(user.role, permission)));
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ entity: string; id: string }> }) {
@@ -248,21 +377,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ en
     const before = await handler.load(recordId);
     if (!before) return Response.json({ error: "Record not found." }, { status: 404 });
 
-    // Full permission, or a technician working their own ticket.
     let schema = handler.schema;
     if (!hasPermission(staff, handler.permission)) {
-      const ownTicket =
-        entity === "tickets" && hasPermission(staff, "tickets.update_assigned") && before.assigneeId === staff.id;
+      const ownTicket = entity === "tickets" && before.assigneeId === staff.id;
       if (!ownTicket) return Response.json({ error: "Your role does not allow this." }, { status: 403 });
       schema = technicianTicketSchema;
     }
 
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
-      return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid update." }, { status: 400 });
+      const issue = parsed.error.issues[0];
+      const fields: Record<string, string> = {};
+      for (const entry of parsed.error.issues) fields[entry.path.join(".") || "_"] ??= entry.message;
+      return Response.json({ error: `${issue?.path.length ? `${issue.path.join(".")}: ` : ""}${issue?.message ?? "Invalid update."}`, fields }, { status: 400 });
     }
     const data = parsed.data as Row;
     if (!Object.keys(data).length) return Response.json({ error: "Nothing to update." }, { status: 400 });
+
+    if ("productCategoryId" in data || "productId" in data) {
+      const { problem } = await catalogueNames(data);
+      if (problem) return Response.json({ error: problem }, { status: 400 });
+    }
 
     const assigneeField = handler.assignee?.field;
     const newAssignee = assigneeField ? (data[assigneeField] as string | null | undefined) : undefined;
@@ -285,29 +420,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ en
     });
 
     // Timeline entries for the changes people look for later.
-    const statusField = "stage" in data ? "stage" : "status" in data ? "status" : null;
-    const timelineEntity = { Lead: "Lead", Ticket: "Ticket", Quote: "Quote" }[handler.entity];
-    if (timelineEntity && statusField && data[statusField] !== before[statusField]) {
+    const statusField = handler.statusField;
+    const statusChanged = statusField && statusField in data && data[statusField] !== before[statusField];
+    if (statusChanged) {
       await prisma.crmActivity.create({
         data: {
           department: DEPARTMENT,
           type: handler.entity === "Lead" ? "STAGE_CHANGE" : "STATUS_CHANGE",
-          entityType: timelineEntity,
+          entityType: handler.entity,
           entityId: recordId,
-          body: `${humanise(String(before[statusField]))} → ${humanise(String(data[statusField]))}`,
+          body: `${labelFor(String(before[statusField!]))} → ${labelFor(String(data[statusField!]))}${data.lostReason ? ` — ${data.lostReason}` : ""}`,
           ownerId: staff.id,
         },
       });
     }
-    if (timelineEntity && assigneeField && newAssignee !== undefined && newAssignee !== before[assigneeField]) {
-      const person = newAssignee
-        ? await prisma.user.findUnique({ where: { id: newAssignee }, select: { name: true } })
-        : null;
+    const assigneeChanged = assigneeField && newAssignee !== undefined && newAssignee !== before[assigneeField];
+    if (assigneeChanged && handler.entity !== "Meeting") {
+      const person = newAssignee ? await prisma.user.findUnique({ where: { id: newAssignee }, select: { name: true } }) : null;
       await prisma.crmActivity.create({
         data: {
           department: DEPARTMENT,
           type: "ASSIGNMENT",
-          entityType: timelineEntity,
+          entityType: handler.entity,
           entityId: recordId,
           body: person ? `Assigned to ${person.name}` : "Unassigned",
           ownerId: staff.id,
@@ -316,20 +450,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ en
     }
 
     // Notifications: the new assignee, and whoever holds the record when its status changes.
-    if (newAssignee && newAssignee !== before[assigneeField!]) {
-      await notifyStaff({
-        userIds: [newAssignee],
-        exceptUserId: staff.id,
-        subject: `${staff.name} assigned you ${label}`,
-        link: handler.link(recordId),
-      });
+    if (assigneeChanged && newAssignee) {
+      await notifyStaff({ userIds: [newAssignee], exceptUserId: staff.id, subject: `${staff.name} assigned you ${label}`, link: handler.link(recordId) });
     }
-    if (statusField && data[statusField] !== before[statusField]) {
+    if (statusChanged) {
       const holder = assigneeField ? ((newAssignee ?? before[assigneeField]) as string | null) : null;
       await notifyStaff({
         userIds: [holder],
         exceptUserId: staff.id,
-        subject: `${label[0].toUpperCase()}${label.slice(1)} is now ${humanise(String(data[statusField]))}`,
+        subject: `${label[0].toUpperCase()}${label.slice(1)} is now ${labelFor(String(data[statusField!]))}`,
         body: `Changed by ${staff.name}.`,
         link: handler.link(recordId),
       });

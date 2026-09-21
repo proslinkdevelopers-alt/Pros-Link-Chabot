@@ -19,11 +19,13 @@ import { requirePagePermission } from "@/lib/staff";
 import { chatbotAnalytics, type ChatbotAnalytics } from "@/lib/bot/analytics";
 import { loadConfigState } from "@/lib/bot/config";
 import { DEFAULT_BOT_CONFIG } from "@/data/bot";
-import { DbNotice, FilterChip, PageHeader, StatCard } from "@/components/admin/ui";
-import { Breakdown, DailyColumns } from "@/components/admin/charts";
+import { DbNotice, FilterChip, PageHeader, Section, StatCard } from "@/components/admin/ui";
+import { BarList, TrendChart } from "@/components/admin/charts";
+import { labelFor } from "@/lib/admin/labels";
 import { formatPkr, humanise } from "@/lib/utils";
+import type { Row } from "@/lib/bot/analytics";
 
-export const metadata = { title: "Chatbot Analytics" };
+export const metadata = { title: "Assistant Analytics" };
 
 const VIEWS = {
   ceo: "CEO",
@@ -54,9 +56,9 @@ export default async function ChatbotAnalyticsPage({
   return (
     <>
       <PageHeader
-        eyebrow="WhatsApp assistant"
-        title="Chatbot Analytics"
-        description={`What the WhatsApp assistant produced in the last ${days} days, shown for the team that acts on it.`}
+        eyebrow="Insights"
+        title="Assistant Analytics"
+        description={`What the assistant produced on the website and WhatsApp in the last ${days} days, shown for the team that acts on it.`}
       />
 
       {error && <DbNotice error={error} />}
@@ -108,20 +110,20 @@ function Ceo({ data }: { data: ChatbotAnalytics }) {
   return (
     <>
       <Tiles>
-        <StatCard label="Conversations" value={data.conversations} hint="New WhatsApp threads" icon={MessagesSquare} />
-        <StatCard label="New leads" value={data.newLeads} hint={`${data.hotLeads} hot or high priority`} icon={UserPlus} href="/admin/crm/leads?source=WHATSAPP" />
-        <StatCard label="Conversion rate" value={pct(data.conversionRate)} hint="Won ÷ new WhatsApp leads" icon={TrendingUp} />
+        <StatCard label="Conversations" value={data.conversations} hint="Website and WhatsApp" icon={MessagesSquare} />
+        <StatCard label="New leads" value={data.newLeads} hint={`${data.hotLeads} hot or high priority`} icon={UserPlus} href="/admin/leads" />
+        <StatCard label="Conversion rate" value={pct(data.conversionRate)} hint="Won ÷ new leads from the assistant" icon={TrendingUp} />
         <StatCard label="Revenue attributed" value={formatPkr(data.revenue)} hint="Estimated value of won leads" icon={ReceiptText} />
       </Tiles>
       <div className="mb-6">
         <DailyColumns title="Conversations per day" rows={data.daily} />
       </div>
       <Grid>
-        <Breakdown title="Revenue by source" rows={data.revenueBySource} format={formatPkr} empty="No won WhatsApp leads with a value yet." />
+        <Breakdown title="Revenue by source" rows={data.revenueBySource} unit="PKR" empty="No won leads with an estimated value yet." />
         <Breakdown title="Lead temperature" rows={data.temperatures} />
         <Breakdown title="Service demand" rows={data.services} labels={serviceLabel} />
         <Breakdown title="Demand by city" rows={data.cities} labels={(label) => label} />
-        <Breakdown title="Conversation sources" rows={data.sources} />
+        <Breakdown title="Channels" rows={data.channels} />
         <Breakdown title="Outcomes" rows={outcomes(data)} labels={(label) => label} />
       </Grid>
     </>
@@ -131,7 +133,8 @@ function Ceo({ data }: { data: ChatbotAnalytics }) {
 function outcomes(data: ChatbotAnalytics) {
   return [
     { label: "Quotes requested", count: data.quotesRequested },
-    { label: "Strategy calls requested", count: data.callsRequested },
+    { label: "Callbacks requested", count: data.callsRequested },
+    { label: "Requests tracked", count: data.trackRequests },
     { label: "Demos requested", count: data.demosRequested },
     { label: "Service requests", count: data.serviceRequests },
     { label: "Handed to a person", count: data.handovers },
@@ -143,15 +146,15 @@ function Sales({ data }: { data: ChatbotAnalytics }) {
   return (
     <>
       <Tiles>
-        <StatCard label="Qualified leads" value={data.qualifiedLeads} hint={`of ${data.newLeads} new leads`} icon={UserPlus} href="/admin/crm/leads?source=WHATSAPP" />
-        <StatCard label="Hot & high priority" value={data.hotLeads} hint="Call these first" icon={Flame} href="/admin/crm/leads?stage=HOT" />
+        <StatCard label="Qualified leads" value={data.qualifiedLeads} hint={`of ${data.newLeads} new leads`} icon={UserPlus} href="/admin/leads" />
+        <StatCard label="Hot & high priority" value={data.hotLeads} hint="Call these first" icon={Flame} href="/admin/pipeline" />
         <StatCard label="Quotes requested" value={data.quotesRequested} icon={ReceiptText} href="/admin/quotes" />
-        <StatCard label="Calls & demos" value={data.callsRequested + data.demosRequested} hint={`${data.callsRequested} calls · ${data.demosRequested} demos`} icon={CalendarCheck} href="/admin/meetings" />
+        <StatCard label="Calls & demos" value={data.callsRequested + data.demosRequested} hint={`${data.callsRequested} calls · ${data.demosRequested} demos`} icon={CalendarCheck} href="/admin/appointments" />
       </Tiles>
       <Tiles>
         <StatCard label="Won" value={data.wonLeads} icon={TrendingUp} />
         <StatCard label="Lost" value={data.lostLeads} icon={TrendingDown} />
-        <StatCard label="Enterprise opportunities" value={data.enterprise} icon={Sparkles} />
+        <StatCard label="Corporate enquiries" value={data.enterprise} icon={Sparkles} />
         <StatCard label="Handovers" value={data.handovers} icon={PhoneForwarded} href="/admin/conversations" />
       </Tiles>
       <Grid>
@@ -181,7 +184,7 @@ function Marketing({ data }: { data: ChatbotAnalytics }) {
       <Grid>
         <Breakdown title="Conversation sources" rows={data.sources} />
         <Breakdown title="Campaigns" rows={data.campaigns} labels={(label) => label} empty="No campaign or ad attribution yet. Use ref: codes and click-to-WhatsApp ads." />
-        <Breakdown title="Revenue by source" rows={data.revenueBySource} format={formatPkr} empty="No won leads with a value yet." />
+        <Breakdown title="Revenue by source" rows={data.revenueBySource} unit="PKR" empty="No won leads with an estimated value yet." />
         <Breakdown title="Service demand" rows={data.services} labels={serviceLabel} />
         <Breakdown title="Demand by city" rows={data.cities} labels={(label) => label} />
         <Breakdown title="Most opened menus" rows={data.menus} />
@@ -194,7 +197,7 @@ function Support({ data }: { data: ChatbotAnalytics }) {
   return (
     <>
       <Tiles>
-        <StatCard label="Support tickets" value={data.tickets} icon={Headset} href="/admin/support/tickets" />
+        <StatCard label="Support tickets" value={data.tickets} icon={Headset} href="/admin/support" />
         <StatCard label="Handovers" value={data.handovers} icon={PhoneForwarded} href="/admin/conversations" />
         <StatCard label="Avg response time" value={data.responseSeconds == null ? "—" : formatSeconds(data.responseSeconds)} hint="Customer message → next reply" icon={Timer} />
         <StatCard label="Resolved by the assistant" value={pct(data.aiResolutionRate)} hint="Conversations never handed over" icon={Bot} />
@@ -242,19 +245,41 @@ function Admin({
       <Tiles>
         <StatCard label="Customised sections" value={`${customised.length} / ${sections}`} hint="Chatbot Studio" icon={Sparkles} href="/admin/chatbot" />
         <StatCard label="Configuration warnings" value={warnings.length} icon={AlertTriangle} href="/admin/chatbot" />
-        <StatCard label="WhatsApp send failures" value={data.sendFailures} icon={AlertTriangle} href="/admin/logs" />
+        <StatCard label="WhatsApp send failures" value={data.sendFailures} icon={AlertTriangle} href="/admin/audit" />
         <StatCard label="Opt-outs" value={data.optOuts} icon={TrendingDown} />
       </Tiles>
       <Grid>
         <Breakdown title="Assistant events" rows={data.events} />
-        <Breakdown
-          title="Customised sections"
-          rows={customised.map((label) => ({ label, count: 1 }))}
-          format={() => "custom"}
-          empty="Every section is using the built-in defaults."
-        />
+        <Section title="Customised sections">
+          {customised.length ? (
+            <ul className="space-y-1 text-sm">
+              {customised.map((label) => (
+                <li key={label}>{label}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">Every section is using the built-in defaults.</p>
+          )}
+        </Section>
       </Grid>
     </>
+  );
+}
+
+/** One breakdown as a card of horizontal bars. */
+function Breakdown({ title, rows, labels = labelFor, empty, unit }: { title: string; rows: Row[]; labels?: (label: string) => string; empty?: string; unit?: string }) {
+  return (
+    <Section title={title}>
+      <BarList label={title} rows={rows.map((row) => ({ label: labels(row.label), value: row.count }))} empty={empty} unit={unit} />
+    </Section>
+  );
+}
+
+function DailyColumns({ title, rows }: { title: string; rows: Row[] }) {
+  return (
+    <Section title={title}>
+      <TrendChart label={title} labels={rows.map((row) => row.label)} series={[{ name: "Conversations", values: rows.map((row) => row.count) }]} />
+    </Section>
   );
 }
 

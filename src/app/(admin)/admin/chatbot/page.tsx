@@ -20,9 +20,9 @@ export default async function ChatbotStudioPage() {
   return (
     <>
       <PageHeader
-        eyebrow="WhatsApp assistant"
+        eyebrow="Assistant"
         title="Chatbot Studio"
-        description="Everything the WhatsApp assistant says and does — menus, questions, prices, teams, scoring and automation — editable here without touching code."
+        description="Everything the Pros-Link Assistant says and does on the website and WhatsApp — menus, questions, prices, teams, scoring and automation — editable here without touching code."
         actions={
           <>
             <Link href="/admin/chatbot/simulator" className={buttonVariants({ variant: "brand", size: "sm" })}>

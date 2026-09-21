@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { DEPARTMENT } from "@/config/brand";
+import type { Staff } from "@/lib/staff";
+import type { Permission } from "@/lib/permissions";
 
 /**
  * =============================================================================
@@ -52,23 +54,47 @@ export function isOwn(department: string | null | undefined): boolean {
 
 // --------------------------------------------------------------- Badges -----
 
-export interface NavCounts {
-  openTickets: number;
-  newLeads: number;
-}
+export type NavCounts = Partial<Record<"unreadConversations" | "unreadNotifications" | "newLeads" | "newQuotes" | "openTickets" | "openSupport", number>>;
 
-/** Small live counts rendered as pills in the sidebar. */
-export async function navCounts(): Promise<NavCounts> {
-  const empty: NavCounts = { openTickets: 0, newLeads: 0 };
+const OPEN_TICKETS = ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_CUSTOMER", "TECHNICIAN_DISPATCHED"] as const;
+const SERVICE = ["INSTALLATION", "MAINTENANCE", "REPAIR", "TECHNICAL", "SERVICE", "PARTS"] as const;
 
+/**
+ * The live counts in the sidebar, for what this person may see: a technician
+ * counts only the tickets assigned to them, and nobody sees a count for a
+ * module their role cannot open.
+ */
+export async function navCounts(staff: Staff): Promise<NavCounts> {
+  const may = (permission: Permission) => staff.permissions.has(permission);
   const { data } = await safeQuery(async () => {
-    const [openTickets, newLeads] = await Promise.all([
-      prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] }, ...OWN } }),
-      prisma.lead.count({ where: { stage: "NEW", ...OWN } }),
+    const [unreadConversations, unreadNotifications, newLeads, newQuotes, openTickets, openSupport] = await Promise.all([
+      may("conversations.view")
+        ? prisma.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*) AS count FROM conversations
+            WHERE "department"::text = ${DEPARTMENT} AND status = 'OPEN' AND "lastInboundAt" IS NOT NULL
+              AND ("readAt" IS NULL OR "readAt" < "lastInboundAt")`.then((rows) => Number(rows[0]?.count ?? 0))
+        : undefined,
+      may("notifications.view")
+        ? prisma.notification.count({ where: { userId: staff.id, channel: "IN_APP", status: { not: "READ" } } })
+        : undefined,
+      may("leads.view") ? prisma.lead.count({ where: { ...OWN, stage: "NEW" } }) : undefined,
+      may("quotes.view") ? prisma.quote.count({ where: { ...OWN, status: "REQUESTED" } }) : undefined,
+      may("tickets.view") || may("tickets.view_assigned")
+        ? prisma.ticket.count({
+            where: {
+              ...OWN,
+              category: { in: [...SERVICE] },
+              status: { in: [...OPEN_TICKETS] },
+              ...(may("tickets.view") ? {} : { assigneeId: staff.id }),
+            },
+          })
+        : undefined,
+      may("tickets.view")
+        ? prisma.ticket.count({ where: { ...OWN, category: { notIn: [...SERVICE] }, status: { in: [...OPEN_TICKETS] } } })
+        : undefined,
     ]);
-    return { openTickets, newLeads };
-  }, empty);
-
+    return { unreadConversations, unreadNotifications, newLeads, newQuotes, openTickets, openSupport };
+  }, {} as NavCounts);
   return data;
 }
 
