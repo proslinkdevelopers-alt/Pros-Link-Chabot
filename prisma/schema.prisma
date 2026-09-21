@@ -1,23 +1,27 @@
 // =============================================================================
-//  BITSOL AI Assistant — Prisma schema
-//  Designed & Developed by BITSOL MARKETING
+//  Pros-Link platform — Prisma schema
 //
-//  The system of record for BITSOL Marketing — leads, services, customers,
-//  projects, quotes, conversations, tickets, messaging and administration.
+//  The system of record for Pros-Link's customer service, sales and CRM
+//  platform: conversations on the web assistant and WhatsApp, leads, quote
+//  requests, customers and the machines they own, service tickets, the product
+//  catalogue, knowledge, messaging and administration.
 //
-//  RETIRED: BITSOL Institute of Digital Media & AI. The product used to serve
-//  this second business too. Its models (the INSTITUTE section below, plus
-//  `InstituteKnowledge`) are kept so the data in them survives: deleting a
-//  model here would make the next `prisma migrate dev` drop its table. No code
-//  reads or writes them any more.
+//  TENANCY. Every table the application writes carries a `department` column,
+//  and every record is stamped `PROSLINK` (see `src/config/brand.ts`). Every
+//  query filters on it with strict equality. Pros-Link is meant to run on its
+//  own database; the column is defence in depth, so that if the application is
+//  ever pointed at a database holding another application's data, none of that
+//  data is shown or changed. Columns added for this are nullable with no
+//  default: a row written by anything else stays invisible.
 //
-//  Shared infrastructure (users, RBAC, conversations, tickets, notifications,
-//  settings, logs) still carries a `department` column. The app stamps every
-//  record it writes `MARKETING` and filters every console query to it, which is
-//  what keeps the archived Institute rows out of sight.
+//  LEGACY. The models at the end of the file belong to the application this
+//  platform was built from. They are kept so the tables survive — deleting a
+//  model here makes the next `prisma migrate dev` drop its table — and nothing
+//  in the application reads or writes them. Remove them deliberately, with an
+//  export and a migration (see docs/DEPLOYMENT.md).
 //
-//  Table names are mapped to the snake_case collection names in the brief.
-//  Run `prisma migrate dev` to create the tables.
+//  Model names are neutral; `@@map` keeps the existing table names, so a rename
+//  here never renames a table.
 // =============================================================================
 
 generator client {
@@ -37,11 +41,13 @@ datasource db {
 
 // ---------------------------------------------------------------- Enums -----
 
-/// Which business a record belongs to. Every new record is MARKETING;
-/// INSTITUTE marks data archived from the retired BITSOL Institute.
+/// The tenant that owns a record. PROSLINK is this deployment. MARKETING and
+/// INSTITUTE mark legacy rows written by an earlier application; they are never
+/// shown and never modified.
 enum Department {
   MARKETING
   INSTITUTE
+  PROSLINK
 }
 
 enum Language {
@@ -51,16 +57,15 @@ enum Language {
   PA
 }
 
-/// Where a conversation is physically taking place. The assistant, the routing
-/// and both knowledge bases are identical across channels — only the transport
-/// and the way structured data is collected differ (the web chat opens a form,
-/// WhatsApp asks one question at a time).
+/// Where a conversation is physically taking place. The engine, the routing and
+/// the knowledge are identical across channels — only the transport differs.
 enum Channel {
   WEB
   WHATSAPP
 }
 
-/// Coarse access tier. Fine-grained rights live in Role/Permission.
+/// Console role. Permissions for each are defined in `src/lib/permissions.ts`.
+/// GUEST, CUSTOMER, STUDENT, AGENT and INSTRUCTOR are legacy values.
 enum UserRole {
   GUEST
   CUSTOMER
@@ -69,6 +74,10 @@ enum UserRole {
   INSTRUCTOR
   ADMIN
   SUPER_ADMIN
+  SALES
+  SUPPORT
+  TECHNICIAN
+  VIEWER
 }
 
 enum ChatRole {
@@ -77,6 +86,7 @@ enum ChatRole {
   SYSTEM
 }
 
+/// Which surface captured a lead or request. CHATBOT is the web assistant.
 enum LeadSource {
   CHATBOT
   WHATSAPP
@@ -95,12 +105,10 @@ enum Priority {
   URGENT
 }
 
-/// BITSOL Marketing sales pipeline.
-///
-/// `PROPOSAL_SENT` is the "Proposal" status. The values after `LOST` were added
-/// with the WhatsApp growth assistant: HOT is set by lead scoring, FOLLOW_UP by
-/// the follow-up scheduler, SUPPORT for an existing client's conversation,
-/// SPAM by staff and OPTED_OUT when the contact asks not to be messaged.
+/// Sales pipeline: NEW → CONTACTED → QUALIFIED → QUOTE_REQUESTED → QUOTED →
+/// NEGOTIATION → WON | LOST. SPAM and OPTED_OUT close a lead outside the
+/// pipeline. PROPOSAL_SENT, HOT, FOLLOW_UP and SUPPORT are legacy values that
+/// the application no longer assigns.
 enum LeadStage {
   NEW
   CONTACTED
@@ -114,6 +122,8 @@ enum LeadStage {
   SUPPORT
   SPAM
   OPTED_OUT
+  QUOTE_REQUESTED
+  QUOTED
 }
 
 /// Lead score band. Thresholds live in the chatbot configuration.
@@ -147,7 +157,7 @@ enum OptInStatus {
   OPTED_OUT
 }
 
-/// RETIRED — BITSOL Institute admissions pipeline, kept for archived records.
+/// Legacy — kept for the retained admissions table.
 enum AdmissionStage {
   INQUIRY
   CONTACTED
@@ -159,20 +169,31 @@ enum AdmissionStage {
   LOST
 }
 
+/// Ticket lifecycle. OPEN is shown as "New".
 enum TicketStatus {
   OPEN
   IN_PROGRESS
   WAITING_CUSTOMER
   RESOLVED
   CLOSED
+  ASSIGNED
+  TECHNICIAN_DISPATCHED
 }
 
+/// INSTALLATION, TECHNICAL, MAINTENANCE, REPAIR, SERVICE and PARTS are service
+/// tickets; COMPLAINT, CALLBACK, BILLING, SALES and GENERAL are support requests.
 enum TicketCategory {
   TECHNICAL
   BILLING
   SALES
   COMPLAINT
   GENERAL
+  INSTALLATION
+  MAINTENANCE
+  REPAIR
+  SERVICE
+  PARTS
+  CALLBACK
 }
 
 enum MeetingMode {
@@ -191,12 +212,15 @@ enum MeetingStatus {
   NO_SHOW
 }
 
+/// REQUESTED is a customer's request for a quotation; DRAFT onwards is the
+/// quotation the team prepares.
 enum QuoteStatus {
   DRAFT
   SENT
   ACCEPTED
   REJECTED
   EXPIRED
+  REQUESTED
 }
 
 enum ProjectStatus {
@@ -270,6 +294,8 @@ enum ActivityType {
   WHATSAPP
   MEETING
   STAGE_CHANGE
+  ASSIGNMENT
+  STATUS_CHANGE
 }
 
 enum NotificationChannel {
@@ -337,6 +363,29 @@ enum LogLevel {
   ERROR
 }
 
+/// What staff have confirmed about a product's availability. ON_REQUEST — the
+/// default — means the assistant says the team will confirm; it never claims
+/// stock that nobody entered.
+enum ProductAvailability {
+  IN_STOCK
+  LIMITED_STOCK
+  OUT_OF_STOCK
+  ON_ORDER
+  ON_REQUEST
+  DISCONTINUED
+}
+
+enum CustomerStatus {
+  PROSPECT
+  ACTIVE
+  INACTIVE
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
 // -------------------------------------------------- Identity & access --------
 
 model User {
@@ -347,7 +396,7 @@ model User {
   cnic         String?   @unique
   passwordHash String?
   role         UserRole  @default(GUEST)
-  /// Which business this staff member works for. Null = both (super admin).
+  /// Tenant the account belongs to. Only PROSLINK accounts can sign in.
   department   Department?
   language     Language  @default(EN)
   avatarUrl    String?
@@ -359,32 +408,35 @@ model User {
   roleId String?
   rbac   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
-  conversations     Conversation[]
-  assignedLeads     MarketingLead[]  @relation("LeadOwner")
-  assignedAdmission Admission[]      @relation("AdmissionOwner")
-  assignedTickets   Ticket[]         @relation("TicketAssignee")
-  reportedTickets   Ticket[]         @relation("TicketReporter")
-  hostedMeetings    Meeting[]        @relation("MeetingHost")
-  activities        CrmActivity[]    @relation("ActivityOwner")
-  notifications     Notification[]
-  systemLogs        SystemLog[]
-  broadcasts        Broadcast[]      @relation("BroadcastAuthor")
-  customer          Customer?
-  student           Student?
-  faculty           Faculty?
+  conversations         Conversation[]
+  assignedConversations Conversation[]   @relation("ConversationAssignee")
+  assignedLeads         Lead[]           @relation("LeadOwner")
+  assignedAdmission     LegacyAdmission[] @relation("AdmissionOwner")
+  assignedTickets       Ticket[]         @relation("TicketAssignee")
+  reportedTickets       Ticket[]         @relation("TicketReporter")
+  hostedMeetings        Meeting[]        @relation("MeetingHost")
+  activities            CrmActivity[]    @relation("ActivityOwner")
+  ownedCustomers        Customer[]       @relation("CustomerOwner")
+  ownedQuotes           Quote[]          @relation("QuoteOwner")
+  notifications         Notification[]
+  systemLogs            SystemLog[]
+  broadcasts            Broadcast[]      @relation("BroadcastAuthor")
+  customer              Customer?
+  student               LegacyStudent?
+  faculty               LegacyFaculty?
 
   @@index([role])
   @@index([department])
   @@map("users")
 }
 
-/// Named role in the RBAC matrix, e.g. "Admissions Officer".
+/// Named role, mirrored from `src/lib/permissions.ts` by the seed so the
+/// matrix can also be read from the database.
 model Role {
   id          String  @id @default(cuid())
   key         String  @unique
   name        String
   description String?
-  /// Restricts the role to one business; null = applies to both.
   department  Department?
   /// System roles cannot be deleted from the admin console.
   isSystem    Boolean @default(false)
@@ -397,7 +449,7 @@ model Role {
   @@map("roles")
 }
 
-/// A single capability, e.g. `crm.leads.update`.
+/// A single capability, e.g. `crm.leads.manage`.
 model Permission {
   id          String  @id @default(cuid())
   key         String  @unique
@@ -426,9 +478,8 @@ model RolePermission {
 model Conversation {
   id        String      @id @default(cuid())
   reference String      @unique
-  /// Which surface this thread arrived on — the web widget or WhatsApp.
+  /// Which surface this thread arrived on — the web assistant or WhatsApp.
   channel   Channel     @default(WEB)
-  /// Null until the visitor picks a business; set on the first routed turn.
   department Department?
   userId    String?
   user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -439,34 +490,42 @@ model Conversation {
   contactPhone String?
   /// WhatsApp profile name, so the console shows a person rather than a number.
   contactName  String?
-  /// What the customer has told the assistant in conversation, and the lead,
-  /// meeting and ticket it produced. Shape: `CaptureState` in `lib/capture.ts`.
+  /// What the customer has told the assistant, the records it produced and the
+  /// engine's memory. Shape: `CaptureState` in `lib/capture.ts`.
   capture   Json?
   /// Set when a human takes over from the assistant.
   handedOff Boolean     @default(false)
-  /// When the handover happened and which team it went to.
   handedOffAt  DateTime?
   handoverTeam String?
-  /// Set by staff from the console: the assistant stays silent on this thread
-  /// while a person is replying to it.
+  /// Set by staff: the assistant stays silent while a person replies.
   botPaused Boolean     @default(false)
-  /// Attribution, captured from the first message of the thread — a
-  /// click-to-WhatsApp ad referral, a `ref:` code in a prefilled message, or a
-  /// reply to a broadcast.
+  /// Attribution, captured from the first message of the thread.
   trafficSource TrafficSource?
   campaign  String?
   adId      String?
-  /// Meta's `referral` object, verbatim, when the thread opened from an ad.
   referral  Json?
-  /// 1–5 rating captured by the chat satisfaction widget.
   rating    Int?
+  /// Inbox state.
+  status        ConversationStatus @default(OPEN)
+  assigneeId    String?
+  assignee      User?       @relation("ConversationAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  customerId    String?
+  customer      Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  /// The assistant's latest intent label for the thread, e.g. REPAIR or QUOTE.
+  intent        String?
+  tags          String[]    @default([])
+  /// Last customer message; the thread is unread while it is newer than `readAt`.
+  lastInboundAt DateTime?
+  readAt        DateTime?
+  closedAt      DateTime?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   messages   Message[]
   tickets    Ticket[]
-  leads      MarketingLead[]
-  admissions Admission[]
+  leads      Lead[]
+  quotes     Quote[]
+  admissions LegacyAdmission[]
   meetings   Meeting[]
   botEvents  BotEvent[]
 
@@ -475,6 +534,8 @@ model Conversation {
   @@index([createdAt])
   @@index([channel, contactPhone, updatedAt])
   @@index([trafficSource])
+  @@index([department, status, updatedAt])
+  @@index([assigneeId])
   @@map("conversations")
 }
 
@@ -489,29 +550,35 @@ model Message {
   tokens         Int?
   latencyMs      Int?
   /// Provider message id (WhatsApp `wamid.…`). Unique, which is what makes
-  /// webhook redelivery idempotent: Meta retries until it sees a 200, and a
-  /// retry then fails the insert instead of answering the customer twice.
+  /// webhook redelivery idempotent.
   externalId     String?      @unique
-  /// Staff member who wrote an ASSISTANT message from the console. Null for
-  /// the AI assistant, which is how the transcript tells the two apart.
+  /// Staff member who wrote an ASSISTANT message from the console. Null for the
+  /// assistant itself.
   authorId       String?
+  /// WhatsApp media the customer sent: Meta's media id, the kind and MIME type.
+  /// The file is fetched through the console on demand, never stored here.
+  mediaId        String?
+  mediaType      String?
+  mediaMime      String?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId])
   @@map("messages")
 }
 
-// ================================================================ MARKETING ==
+// ======================================================================= CRM ==
 
-model MarketingLead {
+model Lead {
   id           String     @id @default(cuid())
   reference    String     @unique
+  department   Department?
   name         String
   company      String?
   phone        String
+  whatsapp     String?
   email        String?
   businessType String?
-  /// Slug of the requested service (see marketing_services).
+  /// Legacy catalogue slug; unused by this application.
   serviceSlug  String?
   budget       String?
   timeline     String?
@@ -519,9 +586,16 @@ model MarketingLead {
   website      String?
   country      String?
   city         String?
-  /// Catalogue-independent service detail, e.g. "Local SEO" or "Meta Ads".
+  /// What the lead is interested in, in words — "Photocopier / MFP", "Toner".
   subService   String?
-  /// The assistant's intent classification, e.g. WHATSAPP_CHATBOT.
+  productCategoryId String?
+  productCategory   ProductCategory? @relation(fields: [productCategoryId], references: [id], onDelete: SetNull)
+  productId    String?
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity     String?
+  /// Phone call, WhatsApp or email.
+  preferredContact String?
+  /// The assistant's intent classification, e.g. PHOTOCOPIER.
   intent       String?
   businessGoal String?
   challenge    String?
@@ -532,12 +606,11 @@ model MarketingLead {
   /// 0–100, recomputed on every turn from the weights in the chatbot config.
   score        Int        @default(0)
   temperature  LeadTemperature @default(COLD)
-  /// Which scoring rules contributed, e.g. ["Website provided", "Wants demo"].
   scoreReasons String[]
   trafficSource TrafficSource?
   campaign     String?
   adId         String?
-  /// Team key from the chatbot config (SALES, ENTERPRISE, SUPPORT…).
+  /// Team key from the chatbot config (SALES, CORPORATE, SERVICE…).
   assignedTeam String?
   conversationSummary String?
   nextAction   String?
@@ -565,84 +638,79 @@ model MarketingLead {
   @@index([ownerId])
   @@index([temperature])
   @@index([trafficSource])
+  @@index([department, stage])
+  @@index([phone])
   @@map("marketing_leads")
-}
-
-model MarketingService {
-  id          String  @id @default(cuid())
-  slug        String  @unique
-  name        String
-  group       String
-  tagline     String
-  overview    String
-  benefits    String[]
-  features    String[]
-  process     String[]
-  /// Placeholder pricing until the final rate card is published.
-  priceFrom   String?
-  priceModel  String?
-  priceNote   String?
-  isActive    Boolean @default(true)
-  sortOrder   Int     @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  portfolio PortfolioItem[]
-  projects  Project[]
-
-  @@index([group])
-  @@map("marketing_services")
 }
 
 model Customer {
   id         String   @id @default(cuid())
   reference  String   @unique
+  department Department?
   name       String
   company    String?
   phone      String
+  whatsapp   String?
   email      String?
   address    String?
   city       String?
   industry   String?
   notes      String?
   isActive   Boolean  @default(true)
+  status     CustomerStatus @default(PROSPECT)
+  source     LeadSource?
+  ownerId    String?
+  owner      User?    @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  lastInteractionAt DateTime?
   userId     String?  @unique
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  leads    MarketingLead[]
-  projects Project[]
-  quotes   Quote[]
+  leads          Lead[]
+  quotes         Quote[]
+  tickets        Ticket[]
+  conversations  Conversation[]
+  assets         CustomerAsset[]
+  legacyProjects LegacyProject[]
 
   @@index([name])
+  @@index([department, name])
+  @@index([phone])
   @@map("customers")
 }
 
-model Project {
-  id          String        @id @default(cuid())
-  reference   String        @unique
-  title       String
-  summary     String?
-  status      ProjectStatus @default(DISCOVERY)
-  startDate   DateTime?
-  dueDate     DateTime?
-  deliveredAt DateTime?
-  value       Decimal?      @db.Decimal(12, 2)
-  customerId  String?
-  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  serviceId   String?
-  service     MarketingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+/// A machine or product a customer owns — what service tickets are raised against.
+model CustomerAsset {
+  id            String     @id @default(cuid())
+  department    Department
+  customerId    String
+  customer      Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// What the customer calls it when no catalogue product matches.
+  label         String
+  brand         String?
+  model         String?
+  serialNumber  String?
+  installedAt   DateTime?  @db.Date
+  warrantyUntil DateTime?  @db.Date
+  location      String?
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  @@index([status])
-  @@map("projects")
+  @@index([customerId])
+  @@index([serialNumber])
+  @@map("customer_assets")
 }
 
+/// A customer's request for a quotation (REQUESTED) and the quotation the team
+/// prepares from it (DRAFT → SENT → ACCEPTED / REJECTED / EXPIRED).
 model Quote {
   id          String      @id @default(cuid())
   reference   String      @unique
+  department  Department?
   title       String
   status      QuoteStatus @default(DRAFT)
   currency    String      @default("PKR")
@@ -653,306 +721,130 @@ model Quote {
   /// Line items: [{ description, quantity, unitPrice }]
   items       Json?
   notes       String?
+  productCategoryId String?
+  productCategory   ProductCategory? @relation(fields: [productCategoryId], references: [id], onDelete: SetNull)
+  productId   String?
+  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity    String?
+  requirements String?
+  budget      String?
+  preferredContact String?
+  city        String?
+  source      LeadSource?
+  ownerId     String?
+  owner       User?       @relation("QuoteOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   validUntil  DateTime?
   sentAt      DateTime?
   decidedAt   DateTime?
   leadId      String?
-  lead        MarketingLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead        Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
   customerId  String?
   customer    Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   @@index([status])
+  @@index([department, status])
   @@map("quotes")
 }
 
-model PortfolioItem {
+// ================================================================= Catalogue ==
+
+model ProductCategory {
   id          String     @id @default(cuid())
-  slug        String     @unique
-  department  Department @default(MARKETING)
-  title       String
-  client      String?
-  summary     String
-  outcome     String?
-  imageUrl    String?
-  link        String?
-  tags        String[]
-  serviceId   String?
-  service     MarketingService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  isPublished Boolean    @default(true)
+  department  Department
+  slug        String
+  name        String
+  description String?
+  /// Lucide icon name used by the catalogue and the web assistant, e.g. "printer".
+  icon        String?
   sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  @@index([department])
-  @@map("portfolio_items")
+  products Product[]
+  leads    Lead[]
+  quotes   Quote[]
+
+  @@unique([department, slug])
+  @@index([department, isActive, sortOrder])
+  @@map("product_categories")
 }
 
-model Review {
+/// A manufacturer brand. The assistant names a brand only when staff have
+/// verified it (`isVerified`) and made it active.
+model Brand {
   id          String     @id @default(cuid())
   department  Department
-  author      String
-  role        String?
-  company     String?
-  rating      Int        @default(5)
-  body        String
-  isPublished Boolean    @default(true)
+  slug        String
+  name        String
+  description String?
+  logoUrl     String?
+  website     String?
+  isVerified  Boolean    @default(false)
+  isActive    Boolean    @default(false)
+  sortOrder   Int        @default(0)
+  notes       String?
   createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  @@index([department])
-  @@map("reviews")
+  products Product[]
+
+  @@unique([department, slug])
+  @@map("brands")
 }
 
-// ================================================================ INSTITUTE ==
-//  RETIRED. Kept only so BITSOL Institute's data is not dropped by a future
-//  migration. Nothing in the application reads or writes these models; remove
-//  them deliberately, with a migration, once the data has been exported.
+/// A catalogue product. Only PUBLISHED products reach customers, and only the
+/// specifications, availability and documents staff entered.
+model Product {
+  id             String       @id @default(cuid())
+  department     Department
+  slug           String
+  sku            String?
+  name           String
+  categoryId     String?
+  category       ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId        String?
+  brand          Brand?       @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  model          String?
+  summary        String?
+  description    String?
+  images         String[]     @default([])
+  /// [{ label, value }]
+  specifications Json?
+  features       String[]     @default([])
+  /// [{ title, url }] — brochures, datasheets, manuals.
+  documents      Json?
+  availability   ProductAvailability @default(ON_REQUEST)
+  status         PublishState @default(DRAFT)
+  isFeatured     Boolean      @default(false)
+  sortOrder      Int          @default(0)
+  keywords       String[]     @default([])
+  relatedIds     String[]     @default([])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-model Course {
-  id            String   @id @default(cuid())
-  slug          String   @unique
-  name          String
-  group         String
-  tagline       String
-  overview      String
-  curriculum    String[]
-  duration      String
-  /// Placeholder fee until the admissions office confirms the rate card.
-  feeFrom       String?
-  feeModel      String?
-  feeNote       String?
-  instalments   Json?
-  careers       String[]
-  projects      String[]
-  certification String
-  eligibility   String?
-  isActive      Boolean  @default(true)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  leads   Lead[]
+  quotes  Quote[]
+  tickets Ticket[]
+  assets  CustomerAsset[]
 
-  facultyId String?
-  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
-
-  batches    Batch[]
-  admissions Admission[]
-
-  @@index([group])
-  @@map("courses")
+  @@unique([department, slug])
+  @@unique([department, sku])
+  @@index([department, status, categoryId])
+  @@map("products")
 }
 
-model Faculty {
-  id         String   @id @default(cuid())
-  reference  String   @unique
-  name       String
-  title      String
-  bio        String?
-  expertise  String[]
-  photoUrl   String?
-  email      String?
-  phone      String?
-  isActive   Boolean  @default(true)
-  userId     String?  @unique
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+// ================================================================= Knowledge ==
 
-  courses Course[]
-  batches Batch[]
-
-  @@map("faculty")
-}
-
-model Batch {
-  id         String      @id @default(cuid())
-  code       String      @unique
-  courseId   String
-  course     Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  facultyId  String?
-  faculty    Faculty?    @relation(fields: [facultyId], references: [id], onDelete: SetNull)
-  status     BatchStatus @default(PLANNED)
-  startDate  DateTime
-  endDate    DateTime?
-  /// Human-readable timetable, e.g. "Mon/Wed/Fri · 6:00–8:00 PM".
-  schedule   String
-  mode       String      @default("On-campus")
-  seats      Int         @default(25)
-  seatsTaken Int         @default(0)
-  room       String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-
-  enrollments Enrollment[]
-  attendance  Attendance[]
-  assignments Assignment[]
-  admissions  Admission[]
-
-  @@index([status])
-  @@index([startDate])
-  @@map("batches")
-}
-
-model Admission {
-  id             String         @id @default(cuid())
-  reference      String         @unique
-  studentName    String
-  fatherName     String?
-  phone          String
-  whatsapp       String?
-  email          String?
-  qualification  String?
-  city           String?
-  courseId       String?
-  course         Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  /// Free-text course name when the inquiry predates the catalogue entry.
-  courseName     String?
-  preferredBatch String?
-  batchId        String?
-  batch          Batch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  source         LeadSource     @default(CHATBOT)
-  stage          AdmissionStage @default(INQUIRY)
-  priority       Priority       @default(NORMAL)
-  notes          String?
-  lostReason     String?
-  ownerId        String?
-  owner          User?          @relation("AdmissionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  conversationId String?
-  conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  studentId      String?
-  student        Student?       @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  @@index([stage])
-  @@index([createdAt])
-  @@index([ownerId])
-  @@map("admissions")
-}
-
-model Student {
-  id            String   @id @default(cuid())
-  rollNumber    String   @unique
-  name          String
-  fatherName    String?
-  phone         String
-  whatsapp      String?
-  email         String?
-  cnic          String?
-  city          String?
-  qualification String?
-  photoUrl      String?
-  isActive      Boolean  @default(true)
-  userId        String?  @unique
-  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  admissions   Admission[]
-  enrollments  Enrollment[]
-  attendance   Attendance[]
-  certificates Certificate[]
-  submissions  Submission[]
-
-  @@index([name])
-  @@map("students")
-}
-
-model Enrollment {
-  id         String           @id @default(cuid())
-  reference  String           @unique
-  studentId  String
-  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  batchId    String
-  batch      Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  status     EnrollmentStatus @default(ACTIVE)
-  feeStatus  FeeStatus        @default(PENDING)
-  feeTotal   Decimal?         @db.Decimal(10, 2)
-  feePaid    Decimal          @default(0) @db.Decimal(10, 2)
-  /// Instalment ledger: [{ label, dueDate, amount, paidAt }]
-  feePlan    Json?
-  grade      String?
-  enrolledAt DateTime         @default(now())
-  completedAt DateTime?
-  updatedAt  DateTime         @updatedAt
-
-  @@unique([studentId, batchId])
-  @@index([status])
-  @@map("enrollments")
-}
-
-model Attendance {
-  id        String           @id @default(cuid())
-  studentId String
-  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  batchId   String
-  batch     Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  date      DateTime         @db.Date
-  status    AttendanceStatus @default(PRESENT)
-  remarks   String?
-  createdAt DateTime         @default(now())
-
-  @@unique([studentId, batchId, date])
-  @@index([date])
-  @@map("attendance")
-}
-
-model Assignment {
-  id          String   @id @default(cuid())
-  title       String
-  brief       String
-  batchId     String
-  batch       Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  dueDate     DateTime?
-  maxScore    Int      @default(100)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  submissions Submission[]
-
-  @@map("assignments")
-}
-
-model Submission {
-  id           String   @id @default(cuid())
-  assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  studentId    String
-  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  fileUrl      String?
-  notes        String?
-  score        Int?
-  feedback     String?
-  submittedAt  DateTime @default(now())
-
-  @@unique([assignmentId, studentId])
-  @@map("submissions")
-}
-
-model Certificate {
-  id         String   @id @default(cuid())
-  reference  String   @unique
-  studentId  String
-  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  courseName String
-  batchCode  String?
-  grade      String?
-  issuedAt   DateTime @default(now())
-  fileUrl    String?
-  /// Public verification code printed on the certificate.
-  verifyCode String   @unique
-
-  @@index([studentId])
-  @@map("certificates")
-}
-
-// ========================================================= KNOWLEDGE BASES ==
-//  `knowledge_base_marketing` is the assistant's knowledge base.
-//  `knowledge_base_institute` is RETIRED — kept for BITSOL Institute's data.
-
-model MarketingKnowledge {
+/// The assistant's knowledge base, edited from Admin → Knowledge.
+model KnowledgeArticle {
   id          String        @id @default(cuid())
   slug        String        @unique
+  department  Department?
   kind        KnowledgeKind @default(FAQ)
   category    String
   question    String
@@ -960,7 +852,7 @@ model MarketingKnowledge {
   keywords    String[]
   language    Language      @default(EN)
   state       PublishState  @default(PUBLISHED)
-  /// Bumped on every edit; the AI index is rebuilt from the latest version.
+  /// Bumped on every edit.
   version     Int           @default(1)
   indexedAt   DateTime?
   sortOrder   Int           @default(0)
@@ -969,31 +861,11 @@ model MarketingKnowledge {
 
   @@index([category])
   @@index([state])
+  @@index([department, state])
   @@map("knowledge_base_marketing")
 }
 
-model InstituteKnowledge {
-  id          String        @id @default(cuid())
-  slug        String        @unique
-  kind        KnowledgeKind @default(FAQ)
-  category    String
-  question    String
-  answer      String
-  keywords    String[]
-  language    Language      @default(EN)
-  state       PublishState  @default(PUBLISHED)
-  version     Int           @default(1)
-  indexedAt   DateTime?
-  sortOrder   Int           @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  @@index([category])
-  @@index([state])
-  @@map("knowledge_base_institute")
-}
-
-/// Documents, downloads and images referenced by either knowledge base.
+/// Documents, downloads and images referenced by the knowledge base.
 model MediaAsset {
   id          String     @id @default(cuid())
   department  Department
@@ -1003,7 +875,6 @@ model MediaAsset {
   url         String
   mimeType    String?
   sizeBytes   Int?
-  /// Exposed on the public "Downloads" menu when true.
   isDownload  Boolean    @default(false)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -1012,8 +883,11 @@ model MediaAsset {
   @@map("media_assets")
 }
 
-// ============================================================ SHARED OPS ====
+// ============================================================ OPERATIONS ====
 
+/// Service tickets (installation, technical support, maintenance, repair,
+/// service, parts) and support requests (complaints, callbacks, billing,
+/// general), told apart by `category`.
 model Ticket {
   id             String         @id @default(cuid())
   reference      String         @unique
@@ -1026,12 +900,31 @@ model Ticket {
   contactName    String?
   contactPhone   String?
   contactEmail   String?
+  company        String?
+  city           String?
+  address        String?
+  machineType    String?
+  machineBrand   String?
+  machineModel   String?
+  serialNumber   String?
+  productId      String?
+  product        Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  preferredDate  DateTime?      @db.Date
+  preferredTime  String?
+  /// WhatsApp media the customer sent with the request:
+  /// [{ mediaId, type, mime, caption, messageId }]
+  attachments    Json?
+  source         LeadSource?
   resolution     String?
   resolvedAt     DateTime?
+  dispatchedAt   DateTime?
+  closedAt       DateTime?
   reporterId     String?
   reporter       User?          @relation("TicketReporter", fields: [reporterId], references: [id], onDelete: SetNull)
   assigneeId     String?
   assignee       User?          @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  customerId     String?
+  customer       Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
   conversationId String?
   conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())
@@ -1039,9 +932,12 @@ model Ticket {
 
   @@index([status])
   @@index([department])
+  @@index([department, status])
+  @@index([assigneeId])
   @@map("tickets")
 }
 
+/// Appointments — product demonstrations and site visits the customer asked for.
 model Meeting {
   id             String        @id @default(cuid())
   reference      String        @unique
@@ -1061,7 +957,7 @@ model Meeting {
   hostId         String?
   host           User?         @relation("MeetingHost", fields: [hostId], references: [id], onDelete: SetNull)
   leadId         String?
-  lead           MarketingLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead           Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
   conversationId String?
   conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
@@ -1072,13 +968,13 @@ model Meeting {
   @@map("meetings")
 }
 
-/// Polymorphic CRM timeline: notes, follow-ups, reminders and stage changes
-/// against a lead, admission, customer, student, ticket or project.
+/// Polymorphic CRM timeline: notes, follow-ups, reminders, assignments and
+/// status changes against a lead, customer, ticket, quote or conversation.
 model CrmActivity {
   id          String       @id @default(cuid())
   department  Department
   type        ActivityType @default(NOTE)
-  /// "MarketingLead" | "Admission" | "Customer" | "Student" | "Ticket" | "Project"
+  /// "Lead" | "Customer" | "Ticket" | "Quote" | "Conversation"
   entityType  String
   entityId    String
   body        String
@@ -1094,53 +990,14 @@ model CrmActivity {
   @@map("crm_activities")
 }
 
-model Event {
-  id          String     @id @default(cuid())
-  slug        String     @unique
-  department  Department
-  title       String
-  summary     String
-  location    String?
-  startsAt    DateTime
-  endsAt      DateTime?
-  registerUrl String?
-  isPublished Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  @@index([department])
-  @@index([startsAt])
-  @@map("events")
-}
-
-model Announcement {
-  id          String      @id @default(cuid())
-  department  Department?
-  title       String
-  body        String
-  isPublished Boolean     @default(true)
-  publishedAt DateTime    @default(now())
-  expiresAt   DateTime?
-  createdAt   DateTime    @default(now())
-
-  @@index([isPublished])
-  @@map("announcements")
-}
-
 /// A person who has messaged the WhatsApp business number.
-///
-/// Kept separate from `users` because a WhatsApp contact is not an account:
-/// it is a phone number with a profile name, which may later become a lead, an
-/// admission inquiry, both, or nothing at all.
 model WhatsappContact {
   id             String      @id @default(cuid())
   /// Meta's `wa_id` — E.164 digits with no leading `+`, e.g. `923001234567`.
   waId           String      @unique
-  /// Same number in display form (`+923001234567`), used in the CRM.
+  /// Same number in display form (`+923001234567`).
   phone          String
-  /// Name from the sender's WhatsApp profile, when they have set one.
   profileName    String?
-  /// Business this contact last spoke to, so returning messages skip the menu.
   department     Department?
   lastInboundAt  DateTime?
   lastOutboundAt DateTime?
@@ -1158,58 +1015,35 @@ model WhatsappContact {
   @@map("whatsapp_contacts")
 }
 
-/// A WhatsApp message template, as Meta knows it.
-///
-/// Meta owns the truth here: a template is created in (or synced from) the
-/// WhatsApp Business Account, reviewed, and only then may it be sent. This
-/// table is a local mirror so the console can list, filter and compose against
-/// templates without a Graph call on every page load — `syncedAt` says how
-/// stale that mirror is.
-///
-/// Rows with no `metaId` were written here and never submitted; they are
-/// `DRAFT` and cannot be broadcast.
+/// A WhatsApp message template, as Meta knows it — a local mirror so the
+/// console can list and compose without a Graph call on every page load.
 model WhatsappTemplate {
   id          String     @id @default(cuid())
-  /// Local, human-chosen key — what the app's own code refers to a template by
-  /// (`in-fee-reminder`). Independent of Meta's naming rules.
+  /// Local, human-chosen key, independent of Meta's naming rules.
   key         String     @unique
-  /// The name Meta knows it by: lowercase, digits and underscores only. Unique
-  /// per language in the WhatsApp Business Account, which is why the uniqueness
-  /// constraint below is on the pair and not on the name alone.
+  /// The name Meta knows it by: lowercase, digits and underscores only.
   metaName    String
-  /// Meta's template id, present once the template exists in the WABA.
   metaId      String?    @unique
-  /// Null for a template synced from Meta that nobody has assigned to a
-  /// business yet — it is visible to both until someone picks one.
   department  Department?
   name        String
   language    Language   @default(EN)
-  /// Meta's own language code (`en`, `en_US`, `ur`). The `language` enum above
-  /// is this product's four languages; Meta's list is far longer, so the code
-  /// that actually goes on the wire is stored separately.
+  /// Meta's own language code (`en`, `en_US`, `ur`).
   languageCode String    @default("en")
   category    TemplateCategory @default(UTILITY)
   status      TemplateStatus   @default(DRAFT)
   /// The BODY component's text, with Meta's `{{1}}` placeholders intact.
   body        String
-  /// HEADER text, when the header is a text header.
   headerText  String?
-  /// HEADER format — TEXT, IMAGE, VIDEO, DOCUMENT — or null for no header.
+  /// TEXT, IMAGE, VIDEO, DOCUMENT — or null for no header.
   headerFormat String?
   footerText  String?
-  /// The BUTTONS component, verbatim from Meta.
   buttons     Json?
-  /// Every component exactly as Meta returned it, so a future feature can read
-  /// a field this schema does not model yet without a re-sync.
+  /// Every component exactly as Meta returned it.
   components  Json?
-  /// Placeholder names in order, e.g. ["name", "courseName"]. Purely a label
-  /// for the composer — Meta only ever sees positional parameters.
+  /// Placeholder names in order — a label for the composer only.
   variables   String[]
-  /// Meta's reason when `status` is REJECTED, quoted verbatim for the appeal.
   rejectedReason String?
-  /// Meta's delivery quality signal (GREEN / YELLOW / RED) once there is data.
   qualityScore String?
-  /// When this row last matched Meta. Null means it has never been synced.
   syncedAt    DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -1229,36 +1063,26 @@ model Broadcast {
   channel     NotificationChannel @default(WHATSAPP)
   status      BroadcastStatus @default(DRAFT)
   title       String
-  /// The template body with this broadcast's parameters substituted in — what
-  /// a recipient actually reads. Kept as text so the list stays readable even
-  /// after the template is edited or deleted in Meta.
+  /// The template body with this broadcast's parameters substituted in.
   body        String
-  /// Saved audience filter, e.g. { stage: "QUALIFIED", courseSlug: "seo" }.
+  /// Saved audience filter, e.g. { stage: "QUALIFIED", source: "WHATSAPP" }.
   audience    Json?
   templateId  String?
   template    WhatsappTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  /// Template name and language captured at send time. A template can be
-  /// renamed or deleted in Meta; a sent broadcast must still say what it sent.
   templateName String?
   languageCode String?
-  /// Public URL of the image, video or document for a template whose header is
-  /// media rather than text. Meta does not keep the picture that was approved —
-  /// the handle in the template is only for review — so a media header has to
-  /// be supplied again on every single send, or Meta rejects the message.
+  /// Public URL of the header media for a template whose header is media.
   headerMediaUrl String?
-  /// How each `{{n}}` was filled: an ordered list of parameter sources, e.g.
-  /// [{ "kind": "contactName" }, { "kind": "static", "value": "20%" }].
+  /// How each `{{n}}` was filled.
   parameters  Json?
   scheduledAt DateTime?
   startedAt   DateTime?
   sentAt      DateTime?
   recipients  Int             @default(0)
-  /// Accepted by Meta. Delivery is a separate, later fact — see `delivered`.
   sent        Int             @default(0)
   delivered   Int             @default(0)
   readCount   Int             @default(0)
   failed      Int             @default(0)
-  /// Why the run stopped, when it stopped badly.
   error       String?
   createdById String?
   createdBy   User?           @relation("BroadcastAuthor", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1271,28 +1095,19 @@ model Broadcast {
   @@map("broadcasts")
 }
 
-/// One row per person a broadcast was sent to.
-///
-/// Counters on `Broadcast` alone cannot answer "did Ali get it?", and Meta's
-/// delivery receipts arrive minutes later on a webhook keyed by message id —
-/// so the message id has to be stored somewhere it can be looked up. This is
-/// that table, and it doubles as the record of who has already been messaged,
-/// which is what makes a resumed or retried run safe.
+/// One row per person a broadcast was sent to — the key delivery receipts
+/// arrive on, and the record that makes a resumed run safe.
 model BroadcastRecipient {
   id          String    @id @default(cuid())
   broadcastId String
   broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   contactId   String?
   contact     WhatsappContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  /// E.164 digits with no leading `+`, as Meta wants them.
   waId        String
   phone       String
   name        String?
-  /// The body parameters actually sent, in order — kept so a failed send can
-  /// be retried without recomputing them from an audience that has moved on.
   parameters  String[]
   status      BroadcastRecipientStatus @default(PENDING)
-  /// Meta's `wamid.…`. Unique because it is the key delivery receipts arrive on.
   messageId   String?   @unique
   error       String?
   sentAt      DateTime?
@@ -1305,6 +1120,8 @@ model BroadcastRecipient {
   @@map("broadcast_recipients")
 }
 
+/// Team notifications. IN_APP rows belong to one staff member (`userId`) and
+/// are unread until READ; EMAIL rows are queued for delivery.
 model Notification {
   id         String              @id @default(cuid())
   department Department?
@@ -1323,19 +1140,19 @@ model Notification {
 
   @@index([status])
   @@index([department])
+  @@index([userId, status])
   @@map("notifications")
 }
 
-/// Key/value application settings edited from Admin → Settings.
+/// Key/value application settings. Keys are namespaced by tenant
+/// (`proslink.company`, `proslink.bot.menu`).
 model Setting {
   id          String      @id @default(cuid())
   key         String      @unique
-  /// Null for global settings; set for per-business overrides.
   department  Department?
   group       String      @default("general")
   value       Json
   description String?
-  /// Secrets are write-only in the admin UI (never returned to the client).
   isSecret    Boolean     @default(false)
   updatedAt   DateTime    @updatedAt
 
@@ -1343,6 +1160,8 @@ model Setting {
   @@map("settings")
 }
 
+/// Audit log: who did what to which record, with before/after values in
+/// `metadata` for changes.
 model SystemLog {
   id         String      @id @default(cuid())
   level      LogLevel    @default(INFO)
@@ -1364,15 +1183,11 @@ model SystemLog {
   @@map("system_logs")
 }
 
-/// One thing the WhatsApp assistant did or observed — a menu opened, a quote
-/// requested, a handover, a follow-up sent. The chatbot analytics dashboards
-/// count these, so a metric like "demos requested" is a row count rather than
-/// a guess reconstructed from transcripts.
-///
-/// `type` is a string on purpose: new event kinds should not need a migration.
-/// The values the app writes are listed in `lib/bot/types.ts`.
+/// One thing the assistant did or observed — a menu opened, a quote requested,
+/// a handover. Analytics count these rows. `type` is a string on purpose.
 model BotEvent {
   id             String        @id @default(cuid())
+  department     Department?
   type           String
   channel        Channel       @default(WHATSAPP)
   conversationId String?
@@ -1380,17 +1195,17 @@ model BotEvent {
   leadId         String?
   intent         String?
   team           String?
-  /// The menu node, flow or action involved.
   value          String?
   metadata       Json?
   createdAt      DateTime      @default(now())
 
   @@index([type, createdAt])
   @@index([conversationId])
+  @@index([department, type, createdAt])
   @@map("bot_events")
 }
 
-/// Daily rollup powering the admin dashboard widgets and reports.
+/// Daily rollup for dashboards and reports.
 model AnalyticsDaily {
   id                String     @id @default(cuid())
   date              DateTime   @db.Date
@@ -1410,4 +1225,377 @@ model AnalyticsDaily {
   @@unique([date, department])
   @@index([date])
   @@map("analytics_daily")
+}
+
+// ==================================================================== LEGACY ==
+//  Retained tables from the application this platform was built from. Nothing
+//  reads or writes them. See the header of this file before removing any.
+
+model LegacyService {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  group       String
+  tagline     String
+  overview    String
+  benefits    String[]
+  features    String[]
+  process     String[]
+  priceFrom   String?
+  priceModel  String?
+  priceNote   String?
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  portfolio LegacyPortfolioItem[]
+  projects  LegacyProject[]
+
+  @@index([group])
+  @@map("marketing_services")
+}
+
+model LegacyProject {
+  id          String        @id @default(cuid())
+  reference   String        @unique
+  title       String
+  summary     String?
+  status      ProjectStatus @default(DISCOVERY)
+  startDate   DateTime?
+  dueDate     DateTime?
+  deliveredAt DateTime?
+  value       Decimal?      @db.Decimal(12, 2)
+  customerId  String?
+  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  serviceId   String?
+  service     LegacyService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status])
+  @@map("projects")
+}
+
+model LegacyPortfolioItem {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  department  Department @default(MARKETING)
+  title       String
+  client      String?
+  summary     String
+  outcome     String?
+  imageUrl    String?
+  link        String?
+  tags        String[]
+  serviceId   String?
+  service     LegacyService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  isPublished Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([department])
+  @@map("portfolio_items")
+}
+
+model LegacyReview {
+  id          String     @id @default(cuid())
+  department  Department
+  author      String
+  role        String?
+  company     String?
+  rating      Int        @default(5)
+  body        String
+  isPublished Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  @@index([department])
+  @@map("reviews")
+}
+
+model LegacyEvent {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  department  Department
+  title       String
+  summary     String
+  location    String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  registerUrl String?
+  isPublished Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([department])
+  @@index([startsAt])
+  @@map("events")
+}
+
+model LegacyAnnouncement {
+  id          String      @id @default(cuid())
+  department  Department?
+  title       String
+  body        String
+  isPublished Boolean     @default(true)
+  publishedAt DateTime    @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@index([isPublished])
+  @@map("announcements")
+}
+
+model LegacyKnowledge {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  kind        KnowledgeKind @default(FAQ)
+  category    String
+  question    String
+  answer      String
+  keywords    String[]
+  language    Language      @default(EN)
+  state       PublishState  @default(PUBLISHED)
+  version     Int           @default(1)
+  indexedAt   DateTime?
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([category])
+  @@index([state])
+  @@map("knowledge_base_institute")
+}
+
+model LegacyCourse {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  group         String
+  tagline       String
+  overview      String
+  curriculum    String[]
+  duration      String
+  feeFrom       String?
+  feeModel      String?
+  feeNote       String?
+  instalments   Json?
+  careers       String[]
+  projects      String[]
+  certification String
+  eligibility   String?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  facultyId String?
+  faculty   LegacyFaculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+
+  batches    LegacyBatch[]
+  admissions LegacyAdmission[]
+
+  @@index([group])
+  @@map("courses")
+}
+
+model LegacyFaculty {
+  id         String   @id @default(cuid())
+  reference  String   @unique
+  name       String
+  title      String
+  bio        String?
+  expertise  String[]
+  photoUrl   String?
+  email      String?
+  phone      String?
+  isActive   Boolean  @default(true)
+  userId     String?  @unique
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  courses LegacyCourse[]
+  batches LegacyBatch[]
+
+  @@map("faculty")
+}
+
+model LegacyBatch {
+  id         String      @id @default(cuid())
+  code       String      @unique
+  courseId   String
+  course     LegacyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  facultyId  String?
+  faculty    LegacyFaculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  status     BatchStatus @default(PLANNED)
+  startDate  DateTime
+  endDate    DateTime?
+  schedule   String
+  mode       String      @default("On-campus")
+  seats      Int         @default(25)
+  seatsTaken Int         @default(0)
+  room       String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  enrollments LegacyEnrollment[]
+  attendance  LegacyAttendance[]
+  assignments LegacyAssignment[]
+  admissions  LegacyAdmission[]
+
+  @@index([status])
+  @@index([startDate])
+  @@map("batches")
+}
+
+model LegacyAdmission {
+  id             String         @id @default(cuid())
+  reference      String         @unique
+  studentName    String
+  fatherName     String?
+  phone          String
+  whatsapp       String?
+  email          String?
+  qualification  String?
+  city           String?
+  courseId       String?
+  course         LegacyCourse?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  courseName     String?
+  preferredBatch String?
+  batchId        String?
+  batch          LegacyBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  source         LeadSource     @default(CHATBOT)
+  stage          AdmissionStage @default(INQUIRY)
+  priority       Priority       @default(NORMAL)
+  notes          String?
+  lostReason     String?
+  ownerId        String?
+  owner          User?          @relation("AdmissionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  conversationId String?
+  conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  studentId      String?
+  student        LegacyStudent? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([stage])
+  @@index([createdAt])
+  @@index([ownerId])
+  @@map("admissions")
+}
+
+model LegacyStudent {
+  id            String   @id @default(cuid())
+  rollNumber    String   @unique
+  name          String
+  fatherName    String?
+  phone         String
+  whatsapp      String?
+  email         String?
+  cnic          String?
+  city          String?
+  qualification String?
+  photoUrl      String?
+  isActive      Boolean  @default(true)
+  userId        String?  @unique
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  admissions   LegacyAdmission[]
+  enrollments  LegacyEnrollment[]
+  attendance   LegacyAttendance[]
+  certificates LegacyCertificate[]
+  submissions  LegacySubmission[]
+
+  @@index([name])
+  @@map("students")
+}
+
+model LegacyEnrollment {
+  id         String           @id @default(cuid())
+  reference  String           @unique
+  studentId  String
+  student    LegacyStudent    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batchId    String
+  batch      LegacyBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  status     EnrollmentStatus @default(ACTIVE)
+  feeStatus  FeeStatus        @default(PENDING)
+  feeTotal   Decimal?         @db.Decimal(10, 2)
+  feePaid    Decimal          @default(0) @db.Decimal(10, 2)
+  feePlan    Json?
+  grade      String?
+  enrolledAt DateTime         @default(now())
+  completedAt DateTime?
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([studentId, batchId])
+  @@index([status])
+  @@map("enrollments")
+}
+
+model LegacyAttendance {
+  id        String           @id @default(cuid())
+  studentId String
+  student   LegacyStudent    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batchId   String
+  batch     LegacyBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(PRESENT)
+  remarks   String?
+  createdAt DateTime         @default(now())
+
+  @@unique([studentId, batchId, date])
+  @@index([date])
+  @@map("attendance")
+}
+
+model LegacyAssignment {
+  id          String   @id @default(cuid())
+  title       String
+  brief       String
+  batchId     String
+  batch       LegacyBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  dueDate     DateTime?
+  maxScore    Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submissions LegacySubmission[]
+
+  @@map("assignments")
+}
+
+model LegacySubmission {
+  id           String   @id @default(cuid())
+  assignmentId String
+  assignment   LegacyAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      LegacyStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fileUrl      String?
+  notes        String?
+  score        Int?
+  feedback     String?
+  submittedAt  DateTime @default(now())
+
+  @@unique([assignmentId, studentId])
+  @@map("submissions")
+}
+
+model LegacyCertificate {
+  id         String   @id @default(cuid())
+  reference  String   @unique
+  studentId  String
+  student    LegacyStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseName String
+  batchCode  String?
+  grade      String?
+  issuedAt   DateTime @default(now())
+  fileUrl    String?
+  verifyCode String   @unique
+
+  @@index([studentId])
+  @@map("certificates")
 }

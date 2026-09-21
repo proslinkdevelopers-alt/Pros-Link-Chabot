@@ -47,7 +47,7 @@ export default async function WhatsappInboxPage() {
               select: { id: true, contactPhone: true, handedOff: true },
             })
           : Promise.resolve([]),
-        prisma.marketingLead.count({ where: { source: "WHATSAPP" } }),
+        prisma.lead.count({ where: { source: "WHATSAPP" } }),
         prisma.conversation.count({
           where: { channel: "WHATSAPP", handedOff: true, ...OWN_OR_GLOBAL },
         }),

@@ -71,10 +71,10 @@ const HANDLERS: Record<string, Handler> = {
   leads: {
     schema: leadSchema,
     load: async (id) =>
-      (await prisma.marketingLead.findUnique({ where: { id }, select: { id: true } }))
+      (await prisma.lead.findUnique({ where: { id }, select: { id: true } }))
         ? { department: null }
         : null,
-    update: (id, data) => prisma.marketingLead.update({ where: { id }, data }),
+    update: (id, data) => prisma.lead.update({ where: { id }, data }),
     action: "lead.updated",
   },
   tickets: {
@@ -108,11 +108,11 @@ const HANDLERS: Record<string, Handler> = {
   knowledge: {
     schema: knowledgeSchema,
     load: async (id) =>
-      (await prisma.marketingKnowledge.findUnique({ where: { id }, select: { id: true } }))
+      (await prisma.knowledgeArticle.findUnique({ where: { id }, select: { id: true } }))
         ? { department: null }
         : null,
     update: (id, data) =>
-      prisma.marketingKnowledge.update({
+      prisma.knowledgeArticle.update({
         where: { id },
         data: { ...data, indexedAt: new Date() },
       }),

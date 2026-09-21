@@ -15,8 +15,8 @@ export default async function CustomersPage() {
         orderBy: { createdAt: "desc" },
         take: 100,
         include: {
-          _count: { select: { projects: true, leads: true, quotes: true } },
-          projects: {
+          _count: { select: { legacyProjects: true, leads: true, quotes: true } },
+          legacyProjects: {
             select: { value: true, status: true },
             orderBy: { createdAt: "desc" },
           },
@@ -75,7 +75,7 @@ export default async function CustomersPage() {
             header: "Engagement",
             cell: (row) => (
               <div className="text-xs text-muted-foreground">
-                <p>{row._count.projects} projects</p>
+                <p>{row._count.legacyProjects} projects</p>
                 <p>
                   {row._count.leads} leads · {row._count.quotes} quotes
                 </p>
@@ -87,7 +87,7 @@ export default async function CustomersPage() {
             cell: (row) => (
               <span className="text-xs font-medium">
                 {formatPkr(
-                  row.projects.reduce((sum, project) => sum + Number(project.value ?? 0), 0)
+                  row.legacyProjects.reduce((sum, project) => sum + Number(project.value ?? 0), 0)
                 )}
               </span>
             ),

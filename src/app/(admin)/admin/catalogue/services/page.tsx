@@ -13,7 +13,7 @@ export default async function ServicesPage() {
   // The database is the live source; the file catalogue is the fallback so the
   // page is still useful before the first `db:seed`.
   const { data: stored, error } = await safeQuery(
-    () => prisma.marketingService.findMany({ orderBy: { sortOrder: "asc" } }),
+    () => prisma.legacyService.findMany({ orderBy: { sortOrder: "asc" } }),
     []
   );
 

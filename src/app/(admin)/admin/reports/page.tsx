@@ -28,8 +28,8 @@ export default async function ReportsPage() {
                 where: { ...OWN_OR_GLOBAL, createdAt: { gte: since } },
                 select: { createdAt: true },
               }),
-              prisma.marketingLead.groupBy({ by: ["stage"], _count: { _all: true } }),
-              prisma.marketingLead.groupBy({ by: ["source"], _count: { _all: true } }),
+              prisma.lead.groupBy({ by: ["stage"], _count: { _all: true } }),
+              prisma.lead.groupBy({ by: ["source"], _count: { _all: true } }),
               prisma.ticket.groupBy({
                 by: ["status"],
                 _count: { _all: true },

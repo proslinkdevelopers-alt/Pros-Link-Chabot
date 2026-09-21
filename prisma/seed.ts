@@ -194,7 +194,7 @@ async function seedUsers() {
 
 async function seedMarketing() {
   for (const [index, service] of MARKETING_SERVICES.entries()) {
-    await prisma.marketingService.upsert({
+    await prisma.legacyService.upsert({
       where: { slug: service.slug },
       update: {
         name: service.name,
@@ -245,7 +245,7 @@ async function seedKnowledgeBase() {
       indexedAt: new Date(),
       sortOrder: index,
     };
-    await prisma.marketingKnowledge.upsert({
+    await prisma.knowledgeArticle.upsert({
       where: { slug: entry.id },
       update: data,
       create: { slug: entry.id, ...data },
@@ -354,8 +354,8 @@ async function seedContent() {
   ];
 
   for (const announcement of announcements) {
-    const exists = await prisma.announcement.findFirst({ where: { title: announcement.title } });
-    if (!exists) await prisma.announcement.create({ data: announcement });
+    const exists = await prisma.legacyAnnouncement.findFirst({ where: { title: announcement.title } });
+    if (!exists) await prisma.legacyAnnouncement.create({ data: announcement });
   }
   console.log(`   ✔ Announcements: ${announcements.length}`);
 
@@ -376,7 +376,7 @@ async function seedContent() {
   ];
 
   for (const event of events) {
-    await prisma.event.upsert({
+    await prisma.legacyEvent.upsert({
       where: { slug: event.slug },
       update: { title: event.title, summary: event.summary, startsAt: event.startsAt },
       create: event,

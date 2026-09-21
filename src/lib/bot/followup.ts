@@ -55,7 +55,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
     return { ...report, note: "Outside business hours — nothing sent." };
   }
 
-  const leads = await prisma.marketingLead.findMany({
+  const leads = await prisma.lead.findMany({
     where: {
       source: "WHATSAPP",
       temperature: { in: rules.temperatures },
@@ -182,7 +182,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
           externalId: result.messageId,
         },
       }),
-      prisma.marketingLead.update({
+      prisma.lead.update({
         where: { id: lead.id },
         data: {
           followUpCount: { increment: 1 },

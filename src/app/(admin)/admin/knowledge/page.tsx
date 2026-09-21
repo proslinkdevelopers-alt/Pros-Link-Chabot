@@ -28,13 +28,13 @@ export default async function KnowledgePage({
   const { data, error } = await safeQuery(
     async () => {
       const [entries, counts, categories] = await Promise.all([
-        prisma.marketingKnowledge.findMany({
+        prisma.knowledgeArticle.findMany({
           where: category ? { category } : undefined,
           orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
           take: 200,
         }),
-        prisma.marketingKnowledge.groupBy({ by: ["state"], _count: { _all: true } }),
-        prisma.marketingKnowledge.groupBy({ by: ["category"], _count: { _all: true } }),
+        prisma.knowledgeArticle.groupBy({ by: ["state"], _count: { _all: true } }),
+        prisma.knowledgeArticle.groupBy({ by: ["category"], _count: { _all: true } }),
       ]);
       return {
         entries,

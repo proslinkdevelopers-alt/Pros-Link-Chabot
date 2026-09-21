@@ -172,14 +172,14 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
     id: string,
     input: { score: LeadScore; details: CustomerDetails; team?: TeamKey; nextAction?: string; summary?: string }
   ): Promise<void> {
-    const lead = await prisma.marketingLead.findUnique({
+    const lead = await prisma.lead.findUnique({
       where: { id },
       select: { stage: true, priority: true, ownerId: true, trafficSource: true },
     });
     if (!lead) return;
 
     const { score, details } = input;
-    const data: Prisma.MarketingLeadUncheckedUpdateInput = {
+    const data: Prisma.LeadUncheckedUpdateInput = {
       score: score.value,
       temperature: score.temperature,
       scoreReasons: score.reasons,
@@ -212,7 +212,7 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
       if (owner) data.ownerId = owner;
     }
 
-    await prisma.marketingLead.update({ where: { id }, data });
+    await prisma.lead.update({ where: { id }, data });
   }
 
   function customerLines(details: CustomerDetails): string[] {
@@ -461,8 +461,8 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
         case "optOut": {
           await prisma.whatsappContact.update({ where: { waId: ctx.waId }, data: { optedOut: true } });
           const where = { OR: [{ conversationId: ctx.conversationId }, { phone: ctx.phone }] };
-          await prisma.marketingLead.updateMany({ where, data: { optInStatus: "OPTED_OUT" } });
-          await prisma.marketingLead.updateMany({
+          await prisma.lead.updateMany({ where, data: { optInStatus: "OPTED_OUT" } });
+          await prisma.lead.updateMany({
             where: { ...where, stage: { in: ["NEW", "CONTACTED", "FOLLOW_UP"] } },
             data: { stage: "OPTED_OUT" },
           });
@@ -471,7 +471,7 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
 
         case "optIn": {
           await prisma.whatsappContact.update({ where: { waId: ctx.waId }, data: { optedOut: false } });
-          await prisma.marketingLead.updateMany({
+          await prisma.lead.updateMany({
             where: { OR: [{ conversationId: ctx.conversationId }, { phone: ctx.phone }] },
             data: { optInStatus: "OPTED_IN" },
           });

@@ -29,7 +29,7 @@ export default async function AiTrainingPage() {
   const { data, error } = await safeQuery(
     async () => {
       const [knowledgeCount, questionCount, handoffs, recentQuestions] = await Promise.all([
-        prisma.marketingKnowledge.count({ where: { state: "PUBLISHED" } }),
+        prisma.knowledgeArticle.count({ where: { state: "PUBLISHED" } }),
         prisma.message.count({ where: { role: "USER", ...OWN_OR_GLOBAL } }),
         prisma.conversation.count({ where: { handedOff: true, ...OWN_OR_GLOBAL } }),
         prisma.message.findMany({

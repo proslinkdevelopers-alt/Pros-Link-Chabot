@@ -13,12 +13,12 @@ export default async function PortfolioPage() {
   const { data, error } = await safeQuery(
     async () => {
       const [items, reviews] = await Promise.all([
-        prisma.portfolioItem.findMany({
+        prisma.legacyPortfolioItem.findMany({
           where: OWN,
           orderBy: { sortOrder: "asc" },
           include: { service: { select: { name: true } } },
         }),
-        prisma.review.findMany({ where: OWN, orderBy: { createdAt: "desc" }, take: 20 }),
+        prisma.legacyReview.findMany({ where: OWN, orderBy: { createdAt: "desc" }, take: 20 }),
       ]);
       return { items, reviews };
     },

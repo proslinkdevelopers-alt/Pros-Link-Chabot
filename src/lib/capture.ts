@@ -176,7 +176,7 @@ export async function syncCapture(
 
         if (!next.leadId && ((name && reachable && hasNeed && interested) || options.forceLead)) {
           const reference = generateReference("LEAD");
-          const lead = await tx.marketingLead.create({
+          const lead = await tx.lead.create({
             data: {
               reference,
               name: name ?? "WhatsApp contact",
@@ -194,7 +194,7 @@ export async function syncCapture(
         } else if (next.leadId) {
           const changes = changedLeadColumns(previous, details);
           if (changes) {
-            await tx.marketingLead.updateMany({ where: { id: next.leadId }, data: changes });
+            await tx.lead.updateMany({ where: { id: next.leadId }, data: changes });
           }
         }
       }
@@ -335,7 +335,7 @@ interface CreatedRecord extends CapturedRecord {
 }
 
 type LeadColumns = Pick<
-  Prisma.MarketingLeadUncheckedCreateInput,
+  Prisma.LeadUncheckedCreateInput,
   | "company"
   | "email"
   | "businessType"
@@ -377,7 +377,7 @@ function leadColumns(details: CustomerDetails): LeadColumns {
 function changedLeadColumns(
   previous: CustomerDetails,
   next: CustomerDetails
-): Prisma.MarketingLeadUpdateManyMutationInput | null {
+): Prisma.LeadUpdateManyMutationInput | null {
   const before = leadColumns(previous);
   const after = leadColumns(next);
   const changes: Record<string, string | null> = {};

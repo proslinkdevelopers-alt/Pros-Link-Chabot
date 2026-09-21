@@ -15,11 +15,11 @@ export default async function EventsPage() {
   const { data, error } = await safeQuery(
     async () => {
       const [upcoming, past] = await Promise.all([
-        prisma.event.findMany({
+        prisma.legacyEvent.findMany({
           where: { ...OWN, startsAt: { gte: now } },
           orderBy: { startsAt: "asc" },
         }),
-        prisma.event.findMany({
+        prisma.legacyEvent.findMany({
           where: { ...OWN, startsAt: { lt: now } },
           orderBy: { startsAt: "desc" },
           take: 20,

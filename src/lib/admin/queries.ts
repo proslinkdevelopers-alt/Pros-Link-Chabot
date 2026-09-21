@@ -96,7 +96,7 @@ export async function navCounts(): Promise<NavCounts> {
   const { data } = await safeQuery(async () => {
     const [openTickets, newLeads] = await Promise.all([
       prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] }, ...OWN } }),
-      prisma.marketingLead.count({ where: { stage: "NEW" } }),
+      prisma.lead.count({ where: { stage: "NEW" } }),
     ]);
     return { openTickets, newLeads };
   }, empty);
@@ -170,14 +170,14 @@ export async function dashboardStats(): Promise<QueryResult<DashboardStats>> {
         where: { createdAt: { gte: startOfToday }, ...OWN_OR_GLOBAL },
       }),
       prisma.conversation.count({ where: OWN_OR_GLOBAL }),
-      prisma.marketingLead.count(),
-      prisma.marketingLead.count({ where: { stage: "NEW" } }),
-      prisma.marketingLead.count({ where: { stage: "WON" } }),
-      prisma.marketingLead.aggregate({
+      prisma.lead.count(),
+      prisma.lead.count({ where: { stage: "NEW" } }),
+      prisma.lead.count({ where: { stage: "WON" } }),
+      prisma.lead.aggregate({
         where: { stage: "WON" },
         _sum: { estimatedValue: true },
       }),
-      prisma.marketingLead.aggregate({
+      prisma.lead.aggregate({
         where: { stage: { notIn: ["WON", "LOST"] } },
         _sum: { estimatedValue: true },
       }),
@@ -191,14 +191,14 @@ export async function dashboardStats(): Promise<QueryResult<DashboardStats>> {
           ...OWN,
         },
       }),
-      prisma.project.count({
+      prisma.legacyProject.count({
         where: { status: { in: ["DISCOVERY", "IN_PROGRESS", "REVIEW"] } },
       }),
       prisma.conversation.aggregate({
         where: { rating: { not: null }, ...OWN_OR_GLOBAL },
         _avg: { rating: true },
       }),
-      prisma.marketingLead.groupBy({
+      prisma.lead.groupBy({
         by: ["serviceSlug"],
         _count: { _all: true },
         where: { serviceSlug: { not: null } },

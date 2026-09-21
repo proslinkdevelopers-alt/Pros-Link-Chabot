@@ -40,7 +40,7 @@ export default async function LeadsPage({
     ? (source as LeadSource)
     : undefined;
 
-  const where: Prisma.MarketingLeadWhereInput = {
+  const where: Prisma.LeadWhereInput = {
     ...(active ? { stage: active } : {}),
     ...(activeSource ? { source: activeSource } : {}),
     ...(activeTemperature ? { temperature: activeTemperature } : {}),
@@ -49,18 +49,18 @@ export default async function LeadsPage({
   const { data, error } = await safeQuery(
     async () => {
       const [leads, stageCounts, sourceCounts] = await Promise.all([
-        prisma.marketingLead.findMany({
+        prisma.lead.findMany({
           where,
           orderBy: activeTemperature ? [{ score: "desc" }, { createdAt: "desc" }] : { createdAt: "desc" },
           take: 100,
           include: { owner: { select: { name: true } } },
         }),
-        prisma.marketingLead.groupBy({
+        prisma.lead.groupBy({
           by: ["stage"],
           _count: { _all: true },
           where: activeSource ? { source: activeSource } : undefined,
         }),
-        prisma.marketingLead.groupBy({
+        prisma.lead.groupBy({
           by: ["source"],
           _count: { _all: true },
           where: active ? { stage: active } : undefined,

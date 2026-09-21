@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const service = data.service ? findService(data.service) : undefined;
 
   try {
-    const lead = await prisma.marketingLead.create({
+    const lead = await prisma.lead.create({
       data: {
         reference,
         name: data.name,

@@ -13,7 +13,7 @@ export default async function ProjectsPage() {
   const { data, error } = await safeQuery(
     async () => {
       const [projects, inFlight, delivered, value] = await Promise.all([
-        prisma.project.findMany({
+        prisma.legacyProject.findMany({
           orderBy: { createdAt: "desc" },
           take: 100,
           include: {
@@ -21,11 +21,11 @@ export default async function ProjectsPage() {
             service: { select: { name: true } },
           },
         }),
-        prisma.project.count({
+        prisma.legacyProject.count({
           where: { status: { in: ["DISCOVERY", "IN_PROGRESS", "REVIEW"] } },
         }),
-        prisma.project.count({ where: { status: "DELIVERED" } }),
-        prisma.project.aggregate({ _sum: { value: true } }),
+        prisma.legacyProject.count({ where: { status: "DELIVERED" } }),
+        prisma.legacyProject.aggregate({ _sum: { value: true } }),
       ]);
       return { projects, inFlight, delivered, value: Number(value._sum.value ?? 0) };
     },

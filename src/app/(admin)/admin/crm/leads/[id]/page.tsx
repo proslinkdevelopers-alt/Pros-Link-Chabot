@@ -29,7 +29,7 @@ export default async function LeadDetailPage({
   const { data } = await safeQuery(
     async () => {
       const [lead, activities] = await Promise.all([
-        prisma.marketingLead.findUnique({
+        prisma.lead.findUnique({
           where: { id },
           include: {
             owner: { select: { name: true } },
