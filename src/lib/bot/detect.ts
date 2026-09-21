@@ -307,7 +307,8 @@ export function isQuestion(message: string): boolean {
 
 const INDUSTRIES: Array<[label: string, phrases: string[]]> = [
   ["Education", ["school", "schools", "college", "university", "academy", "institute", "madrassa", "coaching", "campus", "اسکول", "کالج"]],
-  ["Government", ["government", "ministry", "govt", "sarkari", "department", "municipal", "سرکاری"]],
+  // Not "department" on its own: "our accounts department" is not a government office.
+  ["Government", ["government", "government department", "govt department", "ministry", "govt", "sarkari", "municipal", "سرکاری"]],
   ["Banking & finance", ["bank", "banking", "branch banking", "microfinance", "insurance", "leasing"]],
   ["Healthcare", ["hospital", "clinic", "medical", "pharmacy", "laboratory", "lab", "ہسپتال"]],
   ["Printing & publishing", ["printing press", "press", "publisher", "publishing", "print shop", "photocopy shop", "photostat shop"]],

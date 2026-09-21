@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, ImageOff, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -342,13 +342,19 @@ export function ProductForm({
 
 function Thumb({ url }: { url: string }) {
   const [broken, setBroken] = useState(false);
+  const image = useRef<HTMLImageElement>(null);
+  // An image that failed before hydration never fires onError for React.
+  useEffect(() => {
+    const element = image.current;
+    if (element?.complete && element.naturalWidth === 0) setBroken(true);
+  }, [url]);
   return (
     <span className="grid size-20 place-items-center overflow-hidden rounded-lg border bg-secondary">
       {broken ? (
         <ImageOff className="size-5 text-muted-foreground" aria-label="Image could not be loaded" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element -- staff-entered URLs on any host
-        <img src={url} alt="" className="size-full object-cover" onError={() => setBroken(true)} />
+        <img ref={image} src={url} alt="" className="size-full object-cover" onError={() => setBroken(true)} />
       )}
     </span>
   );

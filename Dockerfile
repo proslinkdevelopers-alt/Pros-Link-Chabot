@@ -1,7 +1,6 @@
 # =============================================================================
-#  BITSOL AI Assistant — Production Dockerfile
+#  Pros-Link platform — production Dockerfile
 #  Multi-stage build producing a lean Next.js standalone server.
-#  Designed & Developed by BITSOL MARKETING
 # =============================================================================
 
 # ---- 1. Dependencies -------------------------------------------------------

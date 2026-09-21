@@ -43,8 +43,9 @@ export function integrationStatus(): IntegrationStatus[] {
     },
     {
       name: "Email notifications",
-      state: config.mail.enabled ? "ready" : "optional",
-      detail: config.mail.enabled ? "New leads and tickets are emailed to the team." : "In-app notifications work without it.",
+      state: "optional",
+      detail:
+        "New leads, quote requests and tickets are queued as email rows in the notifications table for the team inbox. This app does not include a mail sender — a worker must deliver them (see docs/DEPLOYMENT.md). In-app notifications work without it.",
       env: ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SALES_NOTIFY_EMAIL"],
     },
     {

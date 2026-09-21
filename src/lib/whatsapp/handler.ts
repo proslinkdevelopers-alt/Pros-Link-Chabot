@@ -24,7 +24,7 @@ import type { InboundMessage } from "./types";
  *  WhatsApp conversation handler
  * =============================================================================
  *
- *  The transport side of the WhatsApp growth assistant. For each inbound
+ *  The transport side of the Pros-Link Assistant on WhatsApp. For each inbound
  *  message it:
  *
  *    1. rate-limits the sender and records the contact,

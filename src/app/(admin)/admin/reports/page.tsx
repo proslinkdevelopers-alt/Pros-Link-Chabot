@@ -118,7 +118,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           value={data?.won._count ?? 0}
           hint={`${winRate === null ? "No decided leads" : `${winRate}% of decided leads`}${data?.won._sum.estimatedValue ? ` · ${formatPkr(Number(data.won._sum.estimatedValue))}` : ""}`}
         />
-        <StatCard label="Tickets raised" value={data?.ticketsRaised ?? 0} hint={`${data?.ticketsResolved ?? 0} resolved · average ${hours(data?.resolution ?? null)} to resolve`} />
+        <StatCard label="Tickets raised" value={data?.ticketsRaised ?? 0} hint={`${data?.ticketsResolved ?? 0} resolved${data?.resolution != null ? ` · ${hours(data.resolution)} on average` : ""}`} />
       </div>
 
       <div className="mb-6 grid gap-6 xl:grid-cols-2">

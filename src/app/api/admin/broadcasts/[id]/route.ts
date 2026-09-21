@@ -51,7 +51,7 @@ export async function POST(
     where: { id },
     include: { template: { select: { name: true, status: true, metaId: true } } },
   });
-  // An archived Institute broadcast is not this console's to send or cancel.
+  // A broadcast from before the Pros-Link platform is not this console's to send or cancel.
   if (!broadcast || !isOwn(broadcast.department)) {
     return Response.json({ error: "Broadcast not found." }, { status: 404 });
   }

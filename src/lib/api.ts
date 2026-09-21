@@ -37,7 +37,7 @@ export async function throttle(
     {
       ok: false,
       message:
-        "We've received several submissions from you already. Please wait a few minutes or call us directly.",
+        "We've received several submissions from you already. Please wait a few minutes and try again.",
     } satisfies SubmissionResult,
     { status: 429 }
   );
@@ -73,7 +73,7 @@ export function invalid(message = "Please check the form and try again."): Respo
 
 /** Uniform 500 used when persistence fails. */
 export function failed(
-  message = "We couldn't save that right now. Please try again, or contact us directly."
+  message = "We couldn't save that right now. Please try again in a moment."
 ): Response {
   return Response.json({ ok: false, message } satisfies SubmissionResult, {
     status: 500,

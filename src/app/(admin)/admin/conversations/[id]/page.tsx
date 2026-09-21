@@ -14,13 +14,14 @@ import { Card } from "@/components/ui/card";
 import { ChannelBadge, DbNotice, DetailList, PageHeader, Section, StatusBadge, Timeline } from "@/components/admin/ui";
 import { InlineSelect, NoteComposer } from "@/components/admin/client/controls";
 import { ConvertActions, ReplyBox, TagEditor, ThreadToggles } from "@/components/admin/inbox/InboxControls";
-import { cn, formatDateTime, isUrduScript } from "@/lib/utils";
+import { cn, formatDateTime, humanise, isUrduScript } from "@/lib/utils";
 
 export const metadata = { title: "Conversation" };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function detailValue(key: keyof CustomerDetails, value: string): string {
+function detailValue(key: keyof CustomerDetails, value: string, categories: Map<string, string>): string {
+  if (key === "productCategory") return categories.get(value) ?? value;
   if (key === "meetingMode") return MEETING_MODE_LABEL[value as keyof typeof MEETING_MODE_LABEL] ?? value;
   if (key === "topic" || key === "intent" || key === "supportCategory" || key === "priority") return labelFor(value);
   return value;
@@ -48,19 +49,20 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       });
       if (!conversation) return null;
       const authorIds = [...new Set(conversation.messages.map((message) => message.authorId).filter(Boolean))] as string[];
-      const [authors, contact, people, activity] = await Promise.all([
+      const [authors, contact, people, activity, categories] = await Promise.all([
         prisma.user.findMany({ where: { id: { in: authorIds } }, select: { id: true, name: true } }),
         conversation.channel === "WHATSAPP" && conversation.contactPhone
           ? prisma.whatsappContact.findUnique({ where: { waId: conversation.contactPhone.replace(/\D/g, "") }, select: { lastInboundAt: true, optedOut: true } })
           : null,
         canManage ? peopleWith(["conversations.reply"]) : Promise.resolve([]),
         activityTimeline([{ entityType: "Conversation", entityId: id }]),
+        prisma.productCategory.findMany({ where: OWN, select: { slug: true, name: true } }),
       ]);
       // Opening the thread marks it read for the team.
       if (canReply && conversation.lastInboundAt && (!conversation.readAt || conversation.readAt < conversation.lastInboundAt)) {
         await prisma.conversation.update({ where: { id }, data: { readAt: new Date() } });
       }
-      return { conversation, authors, contact, people, activity };
+      return { conversation, authors, contact, people, activity, categories };
     },
     null
   );
@@ -75,7 +77,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   const lastInbound = contact?.lastInboundAt ?? conversation.lastInboundAt;
   const windowOpen = conversation.channel === "WEB" || Boolean(lastInbound && Date.now() - lastInbound.getTime() < DAY_MS);
   const who = conversation.customer?.name || conversation.contactName || details.name || conversation.contactPhone || "Website visitor";
-  const learned = DETAIL_LABELS.filter(([key]) => key !== "requirements" && details[key]).map(([key, label]) => [label, detailValue(key, details[key] as string)] as [string, string]);
+  const categoryNames = new Map(data.categories.map((category) => [category.slug, category.name]));
+  const learned = DETAIL_LABELS.filter(([key]) => key !== "requirements" && details[key]).map(([key, label]) => [label, detailValue(key, details[key] as string, categoryNames)] as [string, string]);
   const canSeeMedia = hasPermission(staff, "conversations.view");
 
   return (
@@ -227,7 +230,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
                 ["Lead score", bot.score ? `${bot.score.value}/100 · ${labelFor(bot.score.temperature)}` : null],
                 ["In progress", bot.flow ? `${labelFor(bot.flow.id)}${bot.flow.pending ? ` — waiting for ${labelFor(bot.flow.pending).toLowerCase()}` : ""}` : null],
                 ["Corporate enquiry", bot.signals.enterprise ? "Yes" : null],
-                ["Source", conversation.trafficSource ? labelFor(conversation.trafficSource) : null],
+                ["Source", conversation.trafficSource ? humanise(conversation.trafficSource) : null],
                 ["Campaign", conversation.campaign],
                 ["Language", conversation.language],
               ]}

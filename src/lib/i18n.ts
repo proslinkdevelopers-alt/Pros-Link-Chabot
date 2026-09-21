@@ -105,8 +105,8 @@ const ROMAN_URDU_MARKERS = [
   "nahi", "nahin", "mujhe", "mujhy", "mera", "meri", "hum", "tum", "kitna",
   "kitni", "kitne", "chahiye", "chahye", "batao", "bataen", "bta", "krna",
   "karna", "kar", "acha", "theek", "thik", "shukriya", "salam", "assalam",
-  "janab", "bhai", "sir ji", "ji han", "jee", "please batao", "fees kitni",
-  "course ka", "kaam", "sikhna", "seekhna", "paisa", "rupay", "waqt",
+  "janab", "bhai", "sir ji", "ji han", "jee", "please batao", "qeemat kya",
+  "machine ka", "kaam", "kharab", "chal nahi", "paisa", "rupay", "waqt",
   // What customers say when they give details: "Hamza naam hai, budget 40
   // hazar mahana" has only "hai" above and was answered in English.
   "naam", "mein", "hoon", "bhi", "abhi", "kab", "kahan", "kaun", "kyun",
