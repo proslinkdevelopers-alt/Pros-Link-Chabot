@@ -53,7 +53,7 @@ export const LANGUAGE_PROFILES: Record<Language, LanguageProfile> = {
     speechTag: "ur-PK",
     rtl: true,
     promptDirective:
-      "Reply in simple, natural Urdu using Urdu script. Keep technical product names in English (e.g. WhatsApp, SEO, AI).",
+      "Reply in simple, natural Urdu using Urdu script. Keep product names, models and technical terms in English (e.g. photocopier, toner, MFP).",
   },
   ur_roman: {
     id: "ur_roman",
@@ -193,78 +193,36 @@ export function asLanguage(value: unknown): Language | null {
 // --------------------------------------------------------------- Dictionary --
 
 type UiKey =
-  | "welcome.title"
-  | "welcome.subtitle"
   | "chat.placeholder"
   | "chat.online"
   | "chat.newChat"
   | "chat.menu"
-  | "chat.voice"
-  | "chat.emptyTitle"
+  | "chat.person"
   | "chat.disclaimer"
-  | "chat.tryAsking";
+  | "chat.staff";
 
 const DICTIONARY: Record<UiKey, Record<Language, string>> = {
-  "welcome.title": {
-    en: "How can we grow your business?",
-    ur: "ہم آپ کے کاروبار کو کیسے بڑھا سکتے ہیں؟",
-    ur_roman: "Hum aap ke business ko kaise barha sakte hain?",
-    pa: "اسی تہاڈے کاروبار نوں کیویں ودھا سکدے آں؟",
-  },
-  "welcome.subtitle": {
-    en: "AI automation, software, digital growth and brand — ask in any language.",
-    ur: "اے آئی آٹومیشن، سافٹ ویئر، ڈیجیٹل گروتھ اور برانڈ — کسی بھی زبان میں پوچھیں۔",
-    ur_roman: "AI automation, software, digital growth aur brand — kisi bhi zabaan mein poochein.",
-    pa: "اے آئی آٹومیشن، سافٹ ویئر، ڈیجیٹل گروتھ تے برانڈ — کسے وی زبان وچ پُچھو۔",
-  },
   "chat.placeholder": {
-    en: "Ask anything… (English, اردو, Roman Urdu or پنجابی)",
-    ur: "کچھ بھی پوچھیں… (اردو یا انگریزی)",
-    ur_roman: "Kuch bhi poochein… (Roman Urdu ya English)",
-    pa: "کجھ وی پُچھو… (پنجابی یا انگریزی)",
+    en: "Type your message… (English, اردو or Roman Urdu)",
+    ur: "اپنا پیغام لکھیں…",
+    ur_roman: "Apna message likhein…",
+    pa: "اپنا سنیہا لکھو…",
   },
-  "chat.online": {
-    en: "Assistant online",
-    ur: "اسسٹنٹ آن لائن",
-    ur_roman: "Assistant online",
-    pa: "اسسٹنٹ آن لائن",
-  },
-  "chat.newChat": {
-    en: "New chat",
-    ur: "نئی گفتگو",
-    ur_roman: "Nayi chat",
-    pa: "نویں گل بات",
-  },
-  "chat.menu": {
-    en: "Menu",
-    ur: "مینو",
-    ur_roman: "Menu",
-    pa: "مینو",
-  },
-  "chat.voice": {
-    en: "Voice",
-    ur: "آواز",
-    ur_roman: "Voice",
-    pa: "آواز",
-  },
-  "chat.emptyTitle": {
-    en: "How can I help you today?",
-    ur: "میں آج آپ کی کیا مدد کر سکتا ہوں؟",
-    ur_roman: "Main aaj aap ki kya madad kar sakta hoon?",
-    pa: "میں اج تہاڈی کیہ مدد کر سکنا واں؟",
-  },
+  "chat.online": { en: "Online", ur: "آن لائن", ur_roman: "Online", pa: "آن لائن" },
+  "chat.newChat": { en: "New chat", ur: "نئی گفتگو", ur_roman: "Nayi chat", pa: "نویں گل بات" },
+  "chat.menu": { en: "Menu", ur: "مینو", ur_roman: "Menu", pa: "مینو" },
+  "chat.person": { en: "Talk to a person", ur: "کسی سے بات کریں", ur_roman: "Kisi se baat karein", pa: "کسے نال گل کرو" },
   "chat.disclaimer": {
-    en: "The assistant can make mistakes. Please confirm prices and timelines with our team.",
-    ur: "اسسٹنٹ سے غلطی ہو سکتی ہے۔ قیمت اور وقت ہماری ٹیم سے تصدیق کر لیں۔",
-    ur_roman:
-      "Assistant se ghalti ho sakti hai. Price aur timeline hamari team se confirm kar lein.",
-    pa: "اسسٹنٹ کولوں غلطی ہو سکدی اے۔ ریٹ تے ٹائم لائن ساڈی ٹیم کولوں پکی کر لوو۔",
+    en: "Automated assistant. Prices, availability and visit times are confirmed by our team.",
+    ur: "خودکار اسسٹنٹ۔ قیمت، دستیابی اور وزٹ کا وقت ہماری ٹیم تصدیق کرتی ہے۔",
+    ur_roman: "Automated assistant. Qeemat, availability aur visit ka waqt hamari team confirm karti hai.",
+    pa: "خودکار اسسٹنٹ۔ قیمت، دستیابی تے وزٹ دا ویلا ساڈی ٹیم پکا کردی اے۔",
   },
-  "chat.tryAsking": {
-    en: "Try asking about…",
-    ur: "ان کے بارے میں پوچھیں…",
-    ur_roman: "In ke baare mein poochein…",
-    pa: "ایہناں بارے پُچھو…",
+  "chat.staff": {
+    en: "A member of our team has joined and will reply here.",
+    ur: "ہماری ٹیم کا ایک رکن شامل ہو گیا ہے اور یہیں جواب دے گا۔",
+    ur_roman: "Hamari team ka ek member shamil ho gaya hai aur yahin reply karega.",
+    pa: "ساڈی ٹیم دا اک بندہ شامل ہو گیا اے تے ایتھے ای جواب دیوے گا۔",
   },
 };
 

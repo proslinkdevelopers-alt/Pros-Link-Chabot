@@ -18,8 +18,7 @@ import {
 import { requirePagePermission } from "@/lib/staff";
 import { chatbotAnalytics, type ChatbotAnalytics } from "@/lib/bot/analytics";
 import { loadConfigState } from "@/lib/bot/config";
-import { DEFAULT_BOT_CONFIG } from "@/data/marketing/bot";
-import { findService } from "@/data/marketing/services";
+import { DEFAULT_BOT_CONFIG } from "@/data/bot";
 import { DbNotice, FilterChip, PageHeader, StatCard } from "@/components/admin/ui";
 import { Breakdown, DailyColumns } from "@/components/admin/charts";
 import { formatPkr, humanise } from "@/lib/utils";
@@ -95,7 +94,7 @@ export default async function ChatbotAnalyticsPage({
 // ------------------------------------------------------------------ Views ---
 
 const pct = (value: number) => `${value}%`;
-const serviceLabel = (label: string) => findService(label)?.name ?? label;
+const serviceLabel = (label: string) => label;
 
 function Tiles({ children }: { children: React.ReactNode }) {
   return <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{children}</div>;
@@ -121,7 +120,7 @@ function Ceo({ data }: { data: ChatbotAnalytics }) {
         <Breakdown title="Revenue by source" rows={data.revenueBySource} format={formatPkr} empty="No won WhatsApp leads with a value yet." />
         <Breakdown title="Lead temperature" rows={data.temperatures} />
         <Breakdown title="Service demand" rows={data.services} labels={serviceLabel} />
-        <Breakdown title="Country demand" rows={data.countries} labels={(label) => label} />
+        <Breakdown title="Demand by city" rows={data.cities} labels={(label) => label} />
         <Breakdown title="Conversation sources" rows={data.sources} />
         <Breakdown title="Outcomes" rows={outcomes(data)} labels={(label) => label} />
       </Grid>
@@ -134,7 +133,7 @@ function outcomes(data: ChatbotAnalytics) {
     { label: "Quotes requested", count: data.quotesRequested },
     { label: "Strategy calls requested", count: data.callsRequested },
     { label: "Demos requested", count: data.demosRequested },
-    { label: "Growth plans requested", count: data.growthPlans },
+    { label: "Service requests", count: data.serviceRequests },
     { label: "Handed to a person", count: data.handovers },
     { label: "Support tickets", count: data.tickets },
   ].filter((row) => row.count > 0);
@@ -161,7 +160,7 @@ function Sales({ data }: { data: ChatbotAnalytics }) {
         <Breakdown title="Handovers by team" rows={data.handoversByTeam} labels={teamLabel} />
         <Breakdown title="Service demand" rows={data.services} labels={serviceLabel} />
         <Breakdown title="Intent" rows={data.intents} />
-        <Breakdown title="Country" rows={data.countries} labels={(label) => label} />
+        <Breakdown title="City" rows={data.cities} labels={(label) => label} />
       </Grid>
     </>
   );
@@ -184,7 +183,7 @@ function Marketing({ data }: { data: ChatbotAnalytics }) {
         <Breakdown title="Campaigns" rows={data.campaigns} labels={(label) => label} empty="No campaign or ad attribution yet. Use ref: codes and click-to-WhatsApp ads." />
         <Breakdown title="Revenue by source" rows={data.revenueBySource} format={formatPkr} empty="No won leads with a value yet." />
         <Breakdown title="Service demand" rows={data.services} labels={serviceLabel} />
-        <Breakdown title="Country demand" rows={data.countries} labels={(label) => label} />
+        <Breakdown title="Demand by city" rows={data.cities} labels={(label) => label} />
         <Breakdown title="Most opened menus" rows={data.menus} />
       </Grid>
     </>

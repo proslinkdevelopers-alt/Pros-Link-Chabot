@@ -2,70 +2,61 @@ import type { SectionKey } from "./schema";
 
 /** How each configuration section is presented in Chatbot Studio. */
 export const SECTION_INFO: Record<SectionKey, { title: string; group: string; description: string }> = {
-  contact: {
-    title: "Contact details",
-    group: "Business",
-    description: "The WhatsApp number the chatbot runs on, the business phone, email, website, WhatBot Pro link, address and opening hours the assistant may give out.",
-  },
   businessHours: {
     title: "Business hours",
     group: "Business",
-    description: "When the team is available. Used to tell customers when a person will reply, and to keep follow-ups inside working hours. Days: 0 = Sunday … 6 = Saturday.",
+    description:
+      "When the team is available — null until real hours are entered. With hours set, the assistant tells customers when a person will reply and keeps follow-ups inside working hours. Days: 0 = Sunday … 6 = Saturday. Contact details live in Settings → Company profile.",
   },
   teams: {
-    title: "Teams & departments",
+    title: "Teams",
     group: "Business",
-    description: "Each team's name, the inboxes its handovers and alerts go to, and the console users (by email) its new leads are assigned to.",
+    description: "Each team's name, the inboxes its email notifications go to, and the console users (by email) its new leads are assigned to.",
   },
   pricing: {
-    title: "Pricing",
+    title: "Published pricing",
     group: "Business",
-    description: "The only prices the assistant will ever quote, and the intents they apply to. Any service not listed here is quoted by the team after scoping.",
+    description: "The only prices the assistant will ever quote, and the intents they apply to. Empty by default: every price then comes from the team in a quotation.",
   },
   proof: {
-    title: "Our work & results",
+    title: "References",
     group: "Business",
-    description: "Verified case studies, results, projects, reviews and industries shown under Our Work & Results. Empty sections offer a strategy call instead — never invented examples.",
+    description: "Verified references, installations and reviews. Nothing reaches customers unless it is entered here.",
   },
   personality: {
-    title: "AI personality",
+    title: "Assistant personality",
     group: "Conversation",
     description: "The assistant's name, voice and standing instructions, added to every AI answer.",
   },
   messages: {
     title: "Messages & welcome",
     group: "Conversation",
-    description: "The welcome message and every fixed message: opt-out, handover, enterprise, pricing, errors. Placeholders like {name} and {reference} are filled in automatically.",
+    description: "The welcome message and every fixed message: catalogue, tracking, handover, opt-out, errors. Placeholders like {name} and {reference} are filled in automatically.",
   },
   menu: {
-    title: "Menu items & services",
+    title: "Menus",
     group: "Conversation",
-    description: "The main menu, sub-menus and service explainers. Each node is a menu (a list), a service (an explainer with buttons) or an action.",
+    description: "The main menu and its sub-menus. Each node is a menu (a list), a service explainer with buttons, or an action. Products come from the catalogue.",
   },
   actions: {
     title: "Buttons",
     group: "Conversation",
-    description: "Reusable buttons — Book Consultation, Get a Quote, Talk to Expert… — and what each one does. Button titles show at most 20 characters.",
+    description: "Reusable buttons — Request a Quote, Request Repair, Talk to Sales… — and what each one does. Button titles show at most 20 characters.",
   },
   flows: {
-    title: "Qualification questions",
+    title: "Question flows",
     group: "Conversation",
-    description: "The questions each flow asks (quote, lead generation, project brief, support, demo…), what they create in the CRM and the buttons offered at the end.",
+    description: "The questions each flow asks (quote, installation, service, parts, support, callback, demo, corporate, tracking), what they create in the CRM and the buttons offered at the end.",
   },
   options: {
     title: "Answer options",
     group: "Conversation",
-    description: "The service list, budget ranges (US dollars, and rupees for Pakistan) and timelines offered as choices in flows.",
-  },
-  countries: {
-    title: "Markets",
-    group: "Conversation",
-    description: "Supported countries: dial codes, website domains and words that identify each, and the currency used for budgets.",
+    description: "Machine types, quantities, budget ranges, timelines and contact methods offered as choices in flows.",
   },
   intents: {
     title: "Intents & routing",
     group: "Automation",
-    description: "For each of the 30 intents: the team it routes to, the service it maps to, the buttons under an answer and extra keywords that detect it.",
+    description: "For each intent: the team it routes to, the product category it maps to, the buttons under an answer and extra keywords that detect it.",
   },
   scoring: {
     title: "Lead scoring",
@@ -73,9 +64,9 @@ export const SECTION_INFO: Record<SectionKey, { title: string; group: string; de
     description: "Points per signal and the Cold / Warm / Hot / High Priority thresholds.",
   },
   enterprise: {
-    title: "Enterprise detection",
+    title: "Corporate detection",
     group: "Automation",
-    description: "Headcount and branch thresholds, and phrases that switch on Enterprise Mode.",
+    description: "Headcount and branch thresholds, and phrases (tender, bulk order…) that switch on corporate mode and alert the corporate team.",
   },
   handover: {
     title: "Human handover",
@@ -85,7 +76,7 @@ export const SECTION_INFO: Record<SectionKey, { title: string; group: string; de
   followUp: {
     title: "Follow-up timing",
     group: "Automation",
-    description: "When quiet leads get a check-in, which bands qualify, the message and buttons, and the approved template for check-ins after 24 hours.",
+    description: "When quiet WhatsApp leads get a check-in, which bands qualify, the message and buttons, and the approved template for check-ins after 24 hours.",
   },
   sources: {
     title: "Source tracking",
@@ -95,6 +86,6 @@ export const SECTION_INFO: Record<SectionKey, { title: string; group: string; de
   broadcastCategories: {
     title: "Broadcast categories",
     group: "Automation",
-    description: "The categories marketing broadcasts are organised under.",
+    description: "The categories broadcasts are organised under.",
   },
 };

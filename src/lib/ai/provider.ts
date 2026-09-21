@@ -6,7 +6,7 @@ import { createGeminiProvider } from "./providers/gemini";
 
 /**
  * Resolve the configured AI provider. Selection is driven by AI_PROVIDER so
- * BITSOL can move between Claude, an OpenAI-compatible API, a local Ollama
+ * the platform can move between Claude, an OpenAI-compatible API, a local Ollama
  * model, or Gemini without any code change.
  */
 export function getProvider(): AIProvider {

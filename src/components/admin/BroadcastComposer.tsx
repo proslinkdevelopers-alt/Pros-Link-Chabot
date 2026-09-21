@@ -337,7 +337,7 @@ export function BroadcastComposer({
                 type="url"
                 value={headerMediaUrl}
                 onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                placeholder="https://bitsolmarketing.com/campaign/banner.png"
+                placeholder="https://pros-link.com/campaign/banner.png"
                 required
               />
             </Field>

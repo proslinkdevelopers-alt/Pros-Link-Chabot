@@ -1,319 +1,192 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import {
-  asksQuestion,
-  extractCustomerDetails,
-  planAssistantTurn,
-  shouldEscalate,
-  streamAssistantReply,
-  suggestFollowUps,
-  type CustomerDetails,
-} from "@/lib/ai";
-import { BRAND, DEPARTMENT } from "@/config/brand";
-import { generateReference, generateConversationReference } from "@/lib/utils";
-import { rateLimit } from "@/lib/redis";
-import { prisma } from "@/lib/db";
-import { logEvent, notifyTeam } from "@/lib/notify";
-import { readCapture, recordsOf, syncCapture, type CaptureState } from "@/lib/capture";
-import { detectLanguage } from "@/lib/i18n";
-import { getBotConfig } from "@/lib/bot/config";
-import { promptContextFor } from "@/lib/bot/prompt";
-import type { ChatStreamEvent } from "@/types";
 import type { Language as PrismaLanguage } from "@prisma/client";
+import { prisma } from "@/lib/db";
+import { DEPARTMENT } from "@/config/brand";
+import { rateLimit } from "@/lib/redis";
+import { clientIpOf } from "@/lib/notify";
+import { detectLanguage, type Language } from "@/lib/i18n";
+import type { ChatTurn } from "@/lib/ai";
+import { readCapture, saveTurn } from "@/lib/capture";
+import { contactOf, getCompanyProfile } from "@/lib/company";
+import { listCategories } from "@/lib/catalog";
+import { getBotConfig } from "@/lib/bot/config";
+import { createCrmRuntime } from "@/lib/bot/crm-runtime";
+import { runTurn } from "@/lib/bot/engine";
+import type { Outgoing } from "@/lib/bot/render";
+import { readBotState } from "@/lib/bot/types";
+import type { ChatTurnResponse } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * =============================================================================
+ *  Web assistant — one turn
+ * =============================================================================
+ *
+ *  The website runs the same conversation engine and CRM runtime as WhatsApp:
+ *  the same menus, catalogue, flows, tracking and handover, the same leads,
+ *  quote requests and tickets. Only the transport differs — messages are
+ *  collected and returned as JSON instead of being sent to Meta.
+ *
+ *  The browser holds a random conversation reference; the server holds
+ *  everything else (the transcript, what the customer told us, the engine's
+ *  memory), so reloading the page loses nothing and nothing sensitive lives in
+ *  the browser.
+ * =============================================================================
+ */
+
 const bodySchema = z.object({
-  messages: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant"]),
-        // Empty is allowed and dropped below: a reply the model failed to
-        // produce sits in the client's transcript as an empty turn, and
-        // rejecting it here would fail every message after it.
-        content: z.string().max(4000),
-      })
-    )
-    .min(1)
-    .max(50),
-  conversationRef: z.string().max(64).optional(),
+  conversationRef: z.string().regex(/^PL-CONV-[A-Z2-9]{10}$/, "Invalid conversation reference."),
+  input: z.object({
+    kind: z.enum(["text", "reply"]),
+    text: z.string().max(2000),
+    replyId: z.string().max(200).optional(),
+  }),
 });
 
-function sse(event: ChatStreamEvent): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-const LANGUAGE_MAP = {
-  en: "EN",
-  ur: "UR",
-  ur_roman: "UR_ROMAN",
-  pa: "PA",
-} as const;
+const LANGUAGE_MAP: Record<Language, PrismaLanguage> = { en: "EN", ur: "UR", ur_roman: "UR_ROMAN", pa: "PA" };
+const FROM_PRISMA: Record<PrismaLanguage, Language> = { EN: "en", UR: "ur", UR_ROMAN: "ur_roman", PA: "pa" };
 
 export async function POST(req: NextRequest) {
-  // --- Rate limit (fails open when Redis is absent) -------------------------
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    "anonymous";
-  const { allowed } = await rateLimit(`chat:${ip}`, 30, 60);
+  // A visitor sends one message at a time; this is generous for people and
+  // tight enough that nobody can run up the model bill.
+  const { allowed } = await rateLimit(`chat:${clientIpOf(req) ?? "anonymous"}`, 30, 60);
   if (!allowed) {
-    return Response.json(
-      { error: "Too many requests. Please slow down and try again shortly." },
-      { status: 429 }
-    );
+    return Response.json({ error: "Too many messages. Please wait a moment and try again." }, { status: 429 });
   }
 
-  // --- Validate -------------------------------------------------------------
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
-  }
-  const messages = parsed.data.messages.filter((m) => m.content.trim().length > 0);
-  if (!messages.length) {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
-  }
-  const reference = parsed.data.conversationRef ?? generateConversationReference();
+  if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
+  const { conversationRef, input } = parsed.data;
+  const text = input.text.trim();
+  if (input.kind === "text" && !text) return Response.json({ error: "Type a message first." }, { status: 400 });
+  if (input.kind === "reply" && !input.replyId) return Response.json({ error: "Invalid request." }, { status: 400 });
 
-  // What this customer has already told us, so the representative neither asks
-  // twice nor forgets a name given twenty messages ago. Bounded: a slow
-  // database costs this turn its memory, not its reply.
-  const [stored, botConfig] = await Promise.all([
-    within(loadCapture(reference), 1500, null),
-    getBotConfig(),
-  ]);
-  const known: CustomerDetails = stored?.details ?? {};
-  const lastUserText = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  try {
+    const [config, company, categories] = await Promise.all([getBotConfig(), getCompanyProfile(), listCategories()]);
 
-  const plan = planAssistantTurn(messages, {
-    channel: "WEB",
-    details: known,
-    records: stored ? recordsOf(stored) : undefined,
-    // Contact details, voice and published pricing from Chatbot Studio.
-    bot: promptContextFor(botConfig, detectLanguage(lastUserText)),
-  });
+    // The thread for this reference — created on the first message.
+    let conversation = await prisma.conversation.findUnique({ where: { reference: conversationRef } });
+    if (conversation && (conversation.department !== DEPARTMENT || conversation.channel !== "WEB")) {
+      return Response.json({ error: "This conversation has ended. Please start a new chat." }, { status: 409 });
+    }
+    const isNewConversation = !conversation;
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          reference: conversationRef,
+          channel: "WEB",
+          department: DEPARTMENT,
+          title: input.kind === "text" ? text.slice(0, 80) : `Web chat · ${input.text || "Menu"}`.slice(0, 80),
+          trafficSource: "WEBSITE",
+        },
+      });
+    }
 
-  // Started now, alongside the reply, so it has usually finished by the time
-  // the last token is sent.
-  const extraction = extractCustomerDetails(messages, known);
+    // Language: a tap keeps the conversation's language; free text re-detects,
+    // except a one- or two-word answer ("Lahore"), which says little unless it
+    // is in Urdu script.
+    const stored = FROM_PRISMA[conversation.language];
+    const detected = detectLanguage(text);
+    const shortAnswer = text.split(/\s+/).length <= 2 && detected !== "ur" && detected !== "pa";
+    const language: Language = input.kind !== "text" || shortAnswer ? stored : detected;
 
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const userText = lastUser?.content ?? "";
-
-  const ticketId = shouldEscalate(userText) ? generateReference("TKT") : undefined;
-
-  const encoder = new TextEncoder();
-  const startedAt = Date.now();
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let assistantText = "";
-      // The visitor may close the tab mid-reply; the work below still finishes.
-      const send = (event: ChatStreamEvent) => {
-        try {
-          controller.enqueue(encoder.encode(sse(event)));
-        } catch {
-          /* stream already closed by the client */
-        }
-      };
-
-      // Tell the client the detected language immediately so it can switch
-      // text direction while the model is still generating.
-      send({ type: "meta", language: plan.language });
-
-      try {
-        for await (const chunk of streamAssistantReply(messages, plan)) {
-          assistantText += chunk;
-          send({ type: "chunk", text: chunk });
-        }
-
-        // A stream with no text — a safety block, or a thinking budget spent
-        // entirely on thoughts — would leave an empty bubble. Say so instead.
-        if (!assistantText.trim()) {
-          throw new Error("The model returned no text.");
-        }
-
-        if (ticketId) {
-          const note = `\n\n🎫 I've created ticket **${ticketId}** and passed this to the ${BRAND.name} team. Keep this reference for follow-up.`;
-          assistantText += note;
-          send({ type: "chunk", text: note });
-        }
-
-        send({
-          type: "done",
-          ticketId,
-          suggestions: asksQuestion(assistantText) ? [] : suggestFollowUps(userText),
-        });
-      } catch (err) {
-        console.error("[chat] stream error:", err);
-        send({
-          type: "error",
-          message: "Sorry, I'm having trouble responding right now. Please try again in a moment.",
-        });
-      }
-
-      // --- Best-effort persistence and CRM capture ----------------------------
-      // The client re-enables the composer on `done`, so nobody waits on this.
-      // The stream stays open only to report records the turn created.
-      try {
-        const conversationId = await persist({
-          reference,
-          language: LANGUAGE_MAP[plan.language],
-          userText,
-          assistantText,
-          ticketId,
-          known,
-          latencyMs: Date.now() - startedAt,
-        });
-
-        const captured = await syncCapture(
-          { conversationId, source: "CHATBOT" },
-          await extraction
-        );
-        if (captured?.created.length) {
-          send({ type: "capture", records: captured.created });
-        }
-      } catch (e) {
-        console.warn("[chat] persistence skipped:", (e as Error)?.message ?? e);
-      } finally {
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
-}
-
-/** The capture stored on this conversation, or null for a new or archived one. */
-async function loadCapture(reference: string): Promise<CaptureState | null> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { reference },
-    select: { capture: true, department: true },
-  });
-  if (!conversation) return null;
-  if (conversation.department && conversation.department !== DEPARTMENT) return null;
-  return readCapture(conversation.capture);
-}
-
-/** Resolve with `fallback` if the promise rejects or takes longer than `ms`. */
-function within<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return Promise.race([
-    promise.catch(() => fallback),
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
-
-/**
- * Store the exchange for chat history, CRM context and analytics. Returns the
- * conversation id so the capture can be attached to it.
- */
-async function persist(opts: {
-  reference: string;
-  language: PrismaLanguage;
-  userText: string;
-  assistantText: string;
-  ticketId?: string;
-  known: CustomerDetails;
-  latencyMs: number;
-}): Promise<string> {
-  const { reference, language, userText, assistantText, ticketId, known, latencyMs } = opts;
-
-  const conversation = await prisma.conversation.upsert({
-    where: { reference },
-    update: { updatedAt: new Date(), language },
-    create: {
-      reference,
-      department: DEPARTMENT,
-      language,
-      title: userText.slice(0, 80),
-    },
-  });
-
-  if (userText) {
     await prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: "USER",
-        content: userText,
+        content: text || `[${input.replyId}]`,
         department: DEPARTMENT,
-        language,
+        language: LANGUAGE_MAP[language],
       },
     });
-  }
-
-  // A failed turn has no reply worth keeping; the customer's message still is.
-  if (assistantText.trim()) {
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        role: "ASSISTANT",
-        content: assistantText,
-        department: DEPARTMENT,
-        language,
-        latencyMs,
-      },
-    });
-  }
-
-  if (ticketId) {
-    await prisma.ticket.create({
-      data: {
-        reference: ticketId,
-        department: DEPARTMENT,
-        category: "GENERAL",
-        subject: "Escalated from the BITSOL AI Assistant",
-        description: userText,
-        // Whatever the representative had already learned, so the person who
-        // picks this up can call back without reading the whole transcript.
-        contactName: known.name ?? null,
-        contactPhone: known.phone ?? null,
-        contactEmail: known.email ?? null,
-        conversationId: conversation.id,
-      },
-    });
-
     await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { handedOff: true },
+      data: { lastInboundAt: new Date(), status: "OPEN", closedAt: null },
     });
 
-    await notifyTeam({
-      subject: `Human handoff requested — ${ticketId}`,
-      body: [
-        "A visitor asked for a human.",
-        "",
-        `Ticket: ${ticketId}`,
-        `Conversation: ${reference}`,
-        known.name ? `Name: ${known.name}` : null,
-        known.phone ? `Phone: ${known.phone}` : null,
-        known.email ? `Email: ${known.email}` : null,
-        "",
-        "Their message:",
-        userText,
-      ]
-        .filter((line) => line !== null)
-        .join("\n"),
-      link: `/admin/support/tickets`,
+    const history = await loadHistory(conversation.id);
+    const capture = readCapture(conversation.capture);
+    const state = readBotState(capture.bot);
+    const outbox: Outgoing[] = [];
+    const now = new Date();
+
+    const crm = createCrmRuntime({
+      channel: "WEB",
+      conversationId: conversation.id,
+      phone: "",
+      language,
+      config,
+      company: contactOf(company),
+      categories: categories.map(({ slug, name }) => ({ slug, name })),
+      history,
+      leadId: capture.leadId,
+      customerId: capture.customerId,
+      attribution: { trafficSource: "WEBSITE", campaign: null, adId: null },
+      now,
+      deliver: async (message) => {
+        outbox.push(message);
+        return { ok: true };
+      },
     });
 
-    await logEvent({
-      action: "chat.escalated",
-      entity: "Ticket",
-      entityId: ticketId,
-      message: "Assistant escalated a conversation to a human.",
-    });
+    const result = await runTurn(
+      { kind: input.kind, text: text || input.text, replyId: input.replyId },
+      {
+        config,
+        channel: "WEB",
+        company: contactOf(company),
+        categories: categories.map(({ slug, name }) => ({ slug, name })),
+        language,
+        phone: "",
+        isNewConversation,
+        optedOut: false,
+        botPaused: conversation.botPaused,
+        details: capture.details,
+        state,
+        records: {
+          lead: capture.leadReference,
+          meeting: capture.meetingReference,
+          ticket: capture.ticketReference,
+          quote: capture.quoteReference,
+        },
+        now,
+      },
+      crm
+    );
+
+    await saveTurn(conversation.id, result.details, result.state, crm.records, result.state.intent);
+    await prisma.conversation.update({ where: { id: conversation.id }, data: { language: LANGUAGE_MAP[language] } }).catch(() => {});
+
+    const body: ChatTurnResponse = {
+      reference: conversationRef,
+      language,
+      messages: outbox,
+      records: crm.created,
+      staffHandling: conversation.botPaused || Boolean(result.state.handover && !result.state.handover.silent),
+    };
+    return Response.json(body);
+  } catch (error) {
+    console.error("[chat] turn failed:", error);
+    return Response.json(
+      { error: "Sorry, I couldn't process that just now. Please try again in a moment." },
+      { status: 500 }
+    );
   }
+}
 
-  return conversation.id;
+/** The last turns of the thread, in the shape the AI layer expects. */
+async function loadHistory(conversationId: string): Promise<ChatTurn[]> {
+  const rows = await prisma.message.findMany({
+    where: { conversationId, role: { in: ["USER", "ASSISTANT"] } },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+    select: { role: true, content: true },
+  });
+  return rows
+    .reverse()
+    .map((row) => ({ role: row.role === "USER" ? ("user" as const) : ("assistant" as const), content: row.content }))
+    .filter((turn) => turn.content.trim().length > 0);
 }

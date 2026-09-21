@@ -12,7 +12,6 @@ import {
   StatusBadge,
 } from "@/components/admin/ui";
 import { StatusSelect } from "@/components/admin/StatusSelect";
-import { findService } from "@/data/marketing/services";
 import { LEAD_STAGES, LEAD_TEMPERATURES } from "@/lib/admin/leads";
 import { formatDate, humanise, truncate } from "@/lib/utils";
 
@@ -199,7 +198,7 @@ export default async function LeadsPage({
                 <p className="text-xs font-medium">
                   {row.subService ??
                     (row.serviceSlug
-                      ? findService(row.serviceSlug)?.name ?? humanise(row.serviceSlug)
+                      ? humanise(row.serviceSlug)
                       : "Unspecified")}
                 </p>
                 <p className="text-xs text-muted-foreground">

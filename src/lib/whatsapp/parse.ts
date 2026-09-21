@@ -105,13 +105,17 @@ function normalise(
     case "sticker": {
       const caption =
         raw.image?.caption ?? raw.document?.caption ?? raw.video?.caption ?? "";
+      const media = raw.image ?? raw.document ?? raw.video ?? raw.audio ?? raw.sticker;
       return {
         ...base,
         kind: "media",
         // The caption carries the actual question often enough to be worth
-        // passing to the model; the media itself is acknowledged, not read.
+        // passing to the model. The file itself is not downloaded here: its id
+        // is stored, and staff open it from the console on demand.
         text: caption.trim(),
         mediaKind: raw.type,
+        mediaId: media?.id,
+        mediaMime: media?.mime_type,
       };
     }
 

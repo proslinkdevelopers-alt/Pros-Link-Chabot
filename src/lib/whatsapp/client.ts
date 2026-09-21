@@ -166,7 +166,9 @@ export async function sendButtons(
   to: string,
   body: string,
   buttons: ReplyButton[],
-  footer?: string
+  footer?: string,
+  /** A public https image shown above the message — a product photo. */
+  headerImage?: string
 ): Promise<SendResult> {
   const usable = buttons.slice(0, 3);
   if (!usable.length) return sendText(to, body);
@@ -176,6 +178,7 @@ export async function sendButtons(
     type: "interactive",
     interactive: {
       type: "button",
+      ...(headerImage ? { header: { type: "image", image: { link: headerImage } } } : {}),
       body: { text: clamp(toWhatsAppMarkdown(body), 1024) },
       ...(footer ? { footer: { text: clamp(footer, 60) } } : {}),
       action: {

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * Call it every 15–30 minutes from any scheduler — a crontab line, cron-job.org,
  * GitHub Actions, the hosting panel — with the secret from `CRON_SECRET`:
  *
- *     curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain.com/api/cron/follow-ups
+ *     curl -H "Authorization: Bearer $CRON_SECRET" https://ai.pros-link.com/api/cron/follow-ups
  *
  * It is safe to call more often: each lead gets at most one message per
  * configured step, and the run reports what it sent and why it skipped the rest.

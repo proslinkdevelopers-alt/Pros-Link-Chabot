@@ -1,161 +1,197 @@
-import { CalendarCheck, CheckCircle2, LifeBuoy, User2, Volume2 } from "lucide-react";
+import { CalendarCheck, ChevronRight, ClipboardCheck, FileText, UserRound, Wrench } from "lucide-react";
 import { LogoMark } from "@/components/branding/Logo";
 import { cn, isUrduScript } from "@/lib/utils";
-import type { CapturedRecord, ChatMessage } from "@/types";
+import type { CapturedRecord, Choice, Outgoing } from "@/types";
 
-const RECEIPTS: Record<CapturedRecord["kind"], { label: string; icon: typeof CheckCircle2 }> = {
-  LEAD: { label: "Your details are with our team", icon: CheckCircle2 },
-  MEETING: { label: "Consultation requested — the team will confirm the time", icon: CalendarCheck },
-  TICKET: { label: "Support ticket opened", icon: LifeBuoy },
+export type ChatEntry =
+  | { id: string; from: "user"; text: string }
+  | { id: string; from: "staff"; text: string }
+  | { id: string; from: "bot"; message: Outgoing; records?: CapturedRecord[] };
+
+const RECEIPTS: Record<CapturedRecord["kind"], { label: string; icon: typeof ClipboardCheck }> = {
+  LEAD: { label: "Enquiry passed to our team", icon: ClipboardCheck },
+  QUOTE: { label: "Quote request", icon: FileText },
+  MEETING: { label: "Appointment request", icon: CalendarCheck },
+  TICKET: { label: "Service ticket", icon: Wrench },
 };
 
 /**
- * Renders a single chat message. Detects Urdu/Punjabi script to switch to RTL,
- * and applies a small, safe text formatter (bold + bullets + headings) so
- * responses read well without pulling in a full markdown renderer.
- *
- * Under an assistant reply it also shows a receipt for each CRM record that
- * turn created, so the customer has a reference without the model having to
- * know one existed.
+ * One entry in the transcript: the customer's message, a reply from a member
+ * of staff, or the assistant's message with its buttons or options.
  */
 export function MessageBubble({
-  message,
-  onSpeak,
+  entry,
+  onChoose,
+  disabled,
 }: {
-  message: ChatMessage;
-  onSpeak?: (text: string) => void;
+  entry: ChatEntry;
+  onChoose: (choice: Choice) => void;
+  disabled?: boolean;
 }) {
-  const isUser = message.role === "user";
-  const rtl = isUrduScript(message.content);
-
-  return (
-    <div
-      className={cn(
-        "flex w-full animate-fade-in-up gap-3",
-        isUser ? "flex-row-reverse" : "flex-row"
-      )}
-    >
-      {isUser ? (
-        <span
-          className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-white/[0.07] text-white/70 ring-1 ring-inset ring-white/10"
-          aria-hidden
-        >
-          <User2 className="size-4" />
-        </span>
-      ) : (
-        <span
-          className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-brand-ink ring-1 ring-brand-cyan/30"
-          aria-hidden
-        >
-          <LogoMark className="size-7" />
-        </span>
-      )}
-
-      <div
-        className={cn(
-          "flex min-w-0 max-w-[85%] flex-col gap-2 md:max-w-[78%]",
-          isUser ? "items-end" : "items-start"
-        )}
-      >
+  if (entry.from === "user") {
+    return (
+      <div className="flex justify-end animate-fade-in-up">
         <div
           className={cn(
-            "group relative rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
-            isUser
-              ? "rounded-tr-md bg-brand text-white shadow-brand"
-              : "rounded-tl-md border border-white/[0.07] bg-white/[0.035] text-white/90"
+            "max-w-[85%] whitespace-pre-wrap rounded-xl rounded-tr-sm bg-brand px-3.5 py-2.5 text-[15px] leading-relaxed text-white shadow-brand md:max-w-[70%]",
+            isUrduScript(entry.text) && "urdu"
           )}
         >
-          <div className={cn(rtl && "urdu")}>{renderContent(message.content)}</div>
-
-          {!isUser && message.content && onSpeak && (
-            <button
-              type="button"
-              onClick={() => onSpeak(message.content)}
-              aria-label="Read this answer aloud"
-              className="absolute -bottom-3 right-2 hidden rounded-full bg-brand-slate p-1.5 text-white/60 shadow ring-1 ring-white/10 transition hover:text-brand-cyan group-hover:block"
-            >
-              <Volume2 className="size-3.5" />
-            </button>
-          )}
+          {entry.text}
         </div>
+      </div>
+    );
+  }
 
-        {message.records?.map((record) => {
+  if (entry.from === "staff") {
+    return (
+      <Row avatar={<span className="grid size-8 place-items-center rounded-full bg-emerald-600 text-white"><UserRound className="size-4" /></span>}>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Pros-Link team</p>
+        <Bubble text={entry.text} />
+      </Row>
+    );
+  }
+
+  const { message } = entry;
+  const body = message.type === "text" ? message.body : message.body === "👇" ? "" : message.body;
+
+  return (
+    <Row avatar={<LogoMark className="size-8" />}>
+      <div className="flex min-w-0 flex-col gap-2">
+        {message.type === "buttons" && message.header?.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- product photos come from any host staff enter
+          <img
+            src={message.header.imageUrl}
+            alt=""
+            className="max-h-56 w-full max-w-sm rounded-xl border bg-white object-contain p-2"
+            loading="lazy"
+          />
+        )}
+        {body && <Bubble text={body} />}
+
+        {message.type === "buttons" && (
+          <div className="flex flex-wrap gap-2">
+            {message.buttons.map((button) => (
+              <button
+                key={button.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChoose(button)}
+                className="rounded-lg border border-primary/25 bg-card px-3.5 py-2 text-sm font-semibold text-primary shadow-sm transition hover:border-primary/50 hover:bg-primary/[0.04] disabled:opacity-50"
+              >
+                {button.title}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {message.type === "list" && (
+          <ul className="w-full max-w-md overflow-hidden rounded-xl border bg-card shadow-soft" role="list">
+            {message.rows.map((row) => (
+              <li key={row.id} className="border-b last:border-0">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onChoose(row)}
+                  className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-secondary/60 disabled:opacity-50"
+                >
+                  {row.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element -- product thumbnails from any host
+                    <img src={row.imageUrl} alt="" className="size-11 shrink-0 rounded-md border bg-white object-contain" loading="lazy" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-foreground">{row.title}</span>
+                    {row.description && <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{row.description}</span>}
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {entry.records?.map((record) => {
           const receipt = RECEIPTS[record.kind];
           return (
             <p
               key={record.reference}
-              className="inline-flex max-w-full animate-fade-in-up flex-wrap items-center gap-x-2 gap-y-0.5 rounded-full border border-brand-cyan/20 bg-brand-cyan/[0.06] px-3 py-1.5 text-[12px] text-white/75"
+              className="inline-flex w-fit max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-emerald-600/20 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-900"
             >
-              <receipt.icon className="size-3.5 shrink-0 text-brand-cyan" aria-hidden />
+              <receipt.icon className="size-3.5 shrink-0" aria-hidden />
               <span>{receipt.label}</span>
-              <span className="font-mono text-[11px] tracking-wide text-brand-cyan">
-                {record.reference}
-              </span>
+              <span className="font-mono text-[12px] font-semibold tracking-wide">{record.reference}</span>
             </p>
           );
         })}
       </div>
+    </Row>
+  );
+}
+
+function Row({ avatar, children }: { avatar: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2.5 animate-fade-in-up">
+      <span className="mt-0.5 shrink-0" aria-hidden>
+        {avatar}
+      </span>
+      <div className="min-w-0 max-w-[88%] md:max-w-[75%]">{children}</div>
     </div>
   );
 }
 
-/** Tiny formatter: headings, bullets, numbered steps and **bold** — no HTML injection. */
-function renderContent(text: string) {
+function Bubble({ text }: { text: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-[15px] leading-relaxed text-foreground shadow-soft",
+        isUrduScript(text) && "urdu"
+      )}
+    >
+      {renderText(text)}
+    </div>
+  );
+}
+
+/** Lines, bullets and inline marks — rendered as elements, never as HTML. */
+function renderText(text: string) {
   return text.split("\n").map((line, i) => {
-    const trimmed = line.trimStart();
-
-    if (!trimmed) return <span key={i} className="block h-2" />;
-
-    // A line that is entirely bold reads as a section heading.
-    const heading = /^\*\*(.+)\*\*:?$/.exec(trimmed);
-    if (heading) {
-      return (
-        <p key={i} className={cn("font-semibold text-white", i > 0 && "mt-3")}>
-          {heading[1]}
-        </p>
-      );
-    }
+    const trimmed = line.trim();
+    if (!trimmed) return <span key={i} className="block h-2" aria-hidden />;
 
     const bullet = /^([-*•])\s+/.exec(trimmed);
     const numbered = /^(\d+)\.\s+/.exec(trimmed);
-    const clean = trimmed.replace(/^([-*•]|\d+\.)\s+/, "");
-
     if (bullet || numbered) {
+      const clean = trimmed.replace(/^([-*•]|\d+\.)\s+/, "");
       return (
-        <p key={i} className={cn("flex gap-2", i > 0 && "mt-1")}>
-          <span className="select-none font-semibold text-brand-cyan">
-            {numbered ? `${numbered[1]}.` : "•"}
-          </span>
-          <span>{formatInline(clean)}</span>
+        <p key={i} className="mt-1 flex gap-2">
+          <span className="select-none font-semibold text-primary">{numbered ? `${numbered[1]}.` : "•"}</span>
+          <span className="min-w-0">{inline(clean)}</span>
         </p>
       );
     }
-
     return (
-      <p key={i} className={cn(i > 0 && "mt-1.5")}>
-        {formatInline(line)}
+      <p key={i} className={cn(i > 0 && "mt-1")}>
+        {inline(line)}
       </p>
     );
   });
 }
 
-function formatInline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|_[^_]+_)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
+const TOKEN = /(\*\*[^*]+\*\*|\*[^*\n]+\*|_[^_\n]+_|https?:\/\/[^\s)]+)/g;
+
+function inline(text: string): React.ReactNode[] {
+  return text.split(TOKEN).map((part, i) => {
+    if (!part) return null;
+    if (/^https?:\/\//.test(part)) {
       return (
-        <strong key={i} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer nofollow" className="break-all font-medium text-primary underline underline-offset-2">
+          {part}
+        </a>
       );
     }
-    if (part.length > 2 && part.startsWith("_") && part.endsWith("_")) {
-      return (
-        <em key={i} className="opacity-75">
-          {part.slice(1, -1)}
-        </em>
-      );
-    }
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) return <strong key={i} className="font-semibold">{part.slice(1, -1)}</strong>;
+    if (part.startsWith("_") && part.endsWith("_") && part.length > 2) return <em key={i}>{part.slice(1, -1)}</em>;
     return <span key={i}>{part}</span>;
   });
 }

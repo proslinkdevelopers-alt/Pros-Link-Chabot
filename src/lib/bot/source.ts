@@ -10,8 +10,8 @@ import type { TrafficSourceKey } from "./types";
  *
  *   1. **Click-to-WhatsApp ads.** Meta attaches a `referral` object to the first
  *      message sent from an ad or a boosted post — the ad id, headline and URL.
- *   2. **`ref:` codes.** Links and QR codes BITSOL publishes prefill the message
- *      with a code, e.g. `https://wa.me/923120141581?text=Hi%20BITSOL%20ref:qr:expo24`
+ *   2. **`ref:` codes.** Links and QR codes the business publishes prefill the
+ *      message with a code, e.g. `https://wa.me/<number>?text=Hi%20ref:qr:expo24`
  *      → source QR code, campaign "expo24". The code is stripped before the
  *      assistant reads the message. Codes are managed in the studio.
  *   3. **Broadcast replies.** A contact who writes within a few days of

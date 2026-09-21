@@ -22,10 +22,10 @@ export function shortId(length = 8): string {
 }
 
 /** The kinds of records that carry a customer-facing reference number. */
-export type ReferenceKind = "LEAD" | "TKT" | "QTE" | "MTG" | "CONV" | "BCAST";
+export type ReferenceKind = "LEAD" | "TKT" | "QTE" | "MTG" | "CUS" | "CONV" | "BCAST";
 
 /**
- * Build a customer-facing reference, e.g. `BM-LEAD-7F3K2Q9A`. The kind in the
+ * Build a customer-facing reference, e.g. `PL-TKT-7F3K2Q9A`. The kind in the
  * middle says what the number points at — useful on the CRM board, in WhatsApp
  * replies and when a customer reads it out on a support call.
  */
@@ -75,7 +75,7 @@ export function formatDateTime(value: Date | string | null | undefined): string 
   }).format(date);
 }
 
-/** Turn `PROPOSAL_SENT` into `Proposal sent` for UI labels. */
+/** Turn `QUOTE_REQUESTED` into `Quote requested` for UI labels. */
 export function humanise(value: string): string {
   const spaced = value.replace(/_/g, " ").toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);

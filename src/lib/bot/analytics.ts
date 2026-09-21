@@ -1,16 +1,16 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { OWN, safeQuery, type QueryResult } from "@/lib/admin/queries";
+import { DEPARTMENT } from "@/config/brand";
 
 /**
  * =============================================================================
- *  WhatsApp assistant analytics
+ *  Assistant analytics — web and WhatsApp
  * =============================================================================
  *
- *  One round of queries feeds all six dashboards (CEO, Sales, Marketing,
- *  Support, AI & Automation, Admin); each dashboard shows the slice its reader
- *  acts on. Counts of things the assistant *did* come from `bot_events`; counts
- *  of things in the CRM come from the CRM tables themselves.
+ *  One round of queries feeds every assistant dashboard; each shows the slice
+ *  its reader acts on. Counts of things the assistant *did* come from
+ *  `bot_events`; counts of things in the CRM come from the CRM tables.
  * =============================================================================
  */
 
@@ -31,7 +31,8 @@ export interface ChatbotAnalytics {
   quotesRequested: number;
   demosRequested: number;
   callsRequested: number;
-  growthPlans: number;
+  serviceRequests: number;
+  trackRequests: number;
   handovers: number;
   tickets: number;
   followUpsSent: number;
@@ -52,7 +53,8 @@ export interface ChatbotAnalytics {
   stages: Row[];
   services: Row[];
   intents: Row[];
-  countries: Row[];
+  cities: Row[];
+  channels: Row[];
   sources: Row[];
   campaigns: Row[];
   revenueBySource: Row[];
@@ -76,7 +78,8 @@ const EMPTY: ChatbotAnalytics = {
   quotesRequested: 0,
   demosRequested: 0,
   callsRequested: 0,
-  growthPlans: 0,
+  serviceRequests: 0,
+  trackRequests: 0,
   handovers: 0,
   tickets: 0,
   followUpsSent: 0,
@@ -95,7 +98,8 @@ const EMPTY: ChatbotAnalytics = {
   stages: [],
   services: [],
   intents: [],
-  countries: [],
+  cities: [],
+  channels: [],
   sources: [],
   campaigns: [],
   revenueBySource: [],
@@ -124,9 +128,9 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
   since.setHours(0, 0, 0, 0);
 
   return safeQuery(async () => {
-    const whatsappConversations = { channel: "WHATSAPP" as const, createdAt: { gte: since }, ...OWN };
-    const whatsappLeads = { source: "WHATSAPP" as const, createdAt: { gte: since } };
-    const eventsSince = { createdAt: { gte: since } };
+    const assistantConversations = { createdAt: { gte: since }, ...OWN };
+    const assistantLeads = { source: { in: ["WHATSAPP" as const, "CHATBOT" as const] }, createdAt: { gte: since }, ...OWN };
+    const eventsSince = { createdAt: { gte: since }, ...OWN };
 
     const [
       conversations,
@@ -144,7 +148,8 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
       stageGroups,
       serviceGroups,
       intentGroups,
-      countryGroups,
+      cityGroups,
+      channelGroups,
       sourceGroups,
       campaignGroups,
       revenueGroups,
@@ -155,32 +160,33 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
       ticketStatusGroups,
       response,
     ] = await Promise.all([
-      prisma.conversation.count({ where: whatsappConversations }),
-      prisma.conversation.count({ where: { ...whatsappConversations, handedOff: true } }),
-      prisma.conversation.findMany({ where: whatsappConversations, select: { createdAt: true } }),
-      prisma.lead.count({ where: whatsappLeads }),
-      prisma.lead.count({ where: { ...whatsappLeads, temperature: { in: ["WARM", "HOT", "HIGH_PRIORITY"] } } }),
-      prisma.lead.count({ where: { ...whatsappLeads, temperature: { in: ["HOT", "HIGH_PRIORITY"] } } }),
-      prisma.lead.count({ where: { ...whatsappLeads, stage: "WON" } }),
-      prisma.lead.count({ where: { source: "WHATSAPP", stage: "LOST", updatedAt: { gte: since } } }),
+      prisma.conversation.count({ where: assistantConversations }),
+      prisma.conversation.count({ where: { ...assistantConversations, handedOff: true } }),
+      prisma.conversation.findMany({ where: assistantConversations, select: { createdAt: true } }),
+      prisma.lead.count({ where: assistantLeads }),
+      prisma.lead.count({ where: { ...assistantLeads, temperature: { in: ["WARM", "HOT", "HIGH_PRIORITY"] } } }),
+      prisma.lead.count({ where: { ...assistantLeads, temperature: { in: ["HOT", "HIGH_PRIORITY"] } } }),
+      prisma.lead.count({ where: { ...assistantLeads, stage: "WON" } }),
+      prisma.lead.count({ where: { source: { in: ["WHATSAPP", "CHATBOT"] }, stage: "LOST", updatedAt: { gte: since }, ...OWN } }),
       prisma.botEvent.groupBy({ by: ["type"], _count: { _all: true }, where: eventsSince }),
-      prisma.ticket.count({ where: { ...OWN, createdAt: { gte: since }, conversation: { channel: "WHATSAPP" } } }),
-      prisma.systemLog.count({ where: { action: "whatsapp.send.failed", createdAt: { gte: since } } }),
-      prisma.lead.groupBy({ by: ["temperature"], _count: { _all: true }, where: whatsappLeads }),
-      prisma.lead.groupBy({ by: ["stage"], _count: { _all: true }, where: whatsappLeads }),
-      prisma.lead.groupBy({ by: ["subService"], _count: { _all: true }, where: whatsappLeads }),
-      prisma.lead.groupBy({ by: ["intent"], _count: { _all: true }, where: whatsappLeads }),
-      prisma.lead.groupBy({ by: ["country"], _count: { _all: true }, where: whatsappLeads }),
-      prisma.conversation.groupBy({ by: ["trafficSource"], _count: { _all: true }, where: whatsappConversations }),
+      prisma.ticket.count({ where: { ...OWN, createdAt: { gte: since }, conversationId: { not: null } } }),
+      prisma.systemLog.count({ where: { action: { in: ["whatsapp.send.failed", "chat.send.failed"] }, createdAt: { gte: since }, ...OWN } }),
+      prisma.lead.groupBy({ by: ["temperature"], _count: { _all: true }, where: assistantLeads }),
+      prisma.lead.groupBy({ by: ["stage"], _count: { _all: true }, where: assistantLeads }),
+      prisma.lead.groupBy({ by: ["subService"], _count: { _all: true }, where: assistantLeads }),
+      prisma.lead.groupBy({ by: ["intent"], _count: { _all: true }, where: assistantLeads }),
+      prisma.lead.groupBy({ by: ["city"], _count: { _all: true }, where: assistantLeads }),
+      prisma.conversation.groupBy({ by: ["channel"], _count: { _all: true }, where: assistantConversations }),
+      prisma.conversation.groupBy({ by: ["trafficSource"], _count: { _all: true }, where: assistantConversations }),
       prisma.conversation.groupBy({
         by: ["campaign"],
         _count: { _all: true },
-        where: { ...whatsappConversations, campaign: { not: null } },
+        where: { ...assistantConversations, campaign: { not: null } },
       }),
       prisma.lead.groupBy({
         by: ["trafficSource"],
         _sum: { estimatedValue: true },
-        where: { source: "WHATSAPP", stage: "WON", updatedAt: { gte: since } },
+        where: { source: { in: ["WHATSAPP", "CHATBOT"] }, stage: "WON", updatedAt: { gte: since }, ...OWN },
       }),
       prisma.botEvent.groupBy({ by: ["team"], _count: { _all: true }, where: { ...eventsSince, type: "HANDOVER" } }),
       prisma.botEvent.groupBy({ by: ["value"], _count: { _all: true }, where: { ...eventsSince, type: "FLOW_COMPLETED" } }),
@@ -192,12 +198,12 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
       prisma.ticket.groupBy({
         by: ["category"],
         _count: { _all: true },
-        where: { ...OWN, createdAt: { gte: since }, conversation: { channel: "WHATSAPP" } },
+        where: { ...OWN, createdAt: { gte: since }, conversationId: { not: null } },
       }),
       prisma.ticket.groupBy({
         by: ["status"],
         _count: { _all: true },
-        where: { ...OWN, createdAt: { gte: since }, conversation: { channel: "WHATSAPP" } },
+        where: { ...OWN, createdAt: { gte: since }, conversationId: { not: null } },
       }),
       prisma.$queryRaw<Array<{ seconds: number | null }>>(Prisma.sql`
         SELECT AVG(EXTRACT(EPOCH FROM (t.next_at - t."createdAt")))::float AS seconds
@@ -207,7 +213,7 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
                  LEAD(m."role") OVER (PARTITION BY m."conversationId" ORDER BY m."createdAt") AS next_role
           FROM messages m
           JOIN conversations c ON c.id = m."conversationId"
-          WHERE c.channel = 'WHATSAPP' AND m."createdAt" >= ${since}
+          WHERE c."department"::text = ${DEPARTMENT} AND m."createdAt" >= ${since}
         ) t
         WHERE t."role" = 'USER' AND t.next_role = 'ASSISTANT'
       `),
@@ -243,7 +249,8 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
       quotesRequested: event("QUOTE_REQUESTED"),
       demosRequested: event("DEMO_REQUESTED"),
       callsRequested: event("CALL_REQUESTED"),
-      growthPlans: event("GROWTH_PLAN_REQUESTED"),
+      serviceRequests: event("SERVICE_REQUESTED"),
+      trackRequests: event("TRACK_REQUESTED"),
       handovers: event("HANDOVER"),
       tickets,
       followUpsSent: event("FOLLOW_UP_SENT"),
@@ -262,7 +269,8 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
       stages: rows(stageGroups, "stage", 12),
       services: rows(serviceGroups, "subService"),
       intents: rows(intentGroups, "intent"),
-      countries: rows(countryGroups, "country"),
+      cities: rows(cityGroups, "city"),
+      channels: rows(channelGroups, "channel"),
       sources: rows(sourceGroups, "trafficSource", 12),
       campaigns: rows(campaignGroups, "campaign"),
       revenueBySource,

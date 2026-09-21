@@ -83,3 +83,24 @@ export const SOCIAL_LABELS: Record<keyof CompanyProfile["social"], string> = {
   x: "X",
   tiktok: "TikTok",
 };
+
+/** The contact details the assistant may give out, in the shape the engine takes. */
+export function contactOf(profile: CompanyProfile): {
+  phone: string;
+  whatsapp: string;
+  email: string;
+  website: string;
+  address: string;
+  hours: string;
+  offices: Array<{ city: string; address: string; phone: string }>;
+} {
+  return {
+    phone: profile.phone,
+    whatsapp: profile.whatsapp,
+    email: profile.email,
+    website: profile.website,
+    address: profile.address,
+    hours: profile.hours,
+    offices: profile.offices.map((office) => ({ city: office.city, address: office.address, phone: office.phone })),
+  };
+}

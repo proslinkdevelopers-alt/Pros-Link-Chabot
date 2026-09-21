@@ -1,8 +1,7 @@
 import type { Language } from "@/lib/i18n";
 import { asksQuestion } from "@/lib/ai/intents";
-import type { CustomerDetails, CustomerIntent } from "@/lib/ai/customer";
-import { mergeDetails } from "@/lib/ai/customer";
-import { countryByName, detectCountry } from "./country";
+import { findReference, mergeDetails, type CustomerDetails, type CustomerIntent } from "@/lib/ai/customer";
+import { AVAILABILITY_LABEL, type CatalogProduct } from "@/lib/catalog-types";
 import {
   classify,
   detectEnterprise,
@@ -20,9 +19,10 @@ import { isOpen, nextOpening } from "./hours";
 import { offer, type Choice, type Outgoing } from "./render";
 import { scoreLead, warmedUp, type LeadScore } from "./scoring";
 import type { BotConfig } from "./schema";
-import { handoverSummary, plainBrief, projectBrief, type HandoverSummary } from "./summary";
+import { handoverSummary, machineLine, plainBrief, projectBrief, type HandoverSummary } from "./summary";
 import { fill, hasOwn, pick, wordCount, type TemplateValues } from "./text";
 import {
+  SERVICE_LINE_INTENTS,
   isServiceIntent,
   type ActionRef,
   type ActiveFlow,
@@ -32,36 +32,40 @@ import {
   type ChoiceOption,
   type FlowContext,
   type FlowId,
+  type FlowStep,
+  type Localized,
   type ProofSection,
   type StepField,
-  type Localized,
+  type SupportCategory,
   type TeamKey,
   type Temperature,
 } from "./types";
 
 /**
  * =============================================================================
- *  WhatsApp growth assistant — conversation engine
+ *  Pros-Link Assistant — conversation engine
  * =============================================================================
  *
  *  One customer message in, the replies and CRM effects out. The engine decides
- *  *what happens*; a `BotRuntime` does the I/O — sending to WhatsApp, calling
- *  the model, writing the CRM. Swapping the runtime is how the same engine
- *  runs behind the webhook, inside the admin simulator, and under tests with
- *  no network or database at all.
+ *  *what happens*; a `BotRuntime` does the I/O — sending to WhatsApp or back to
+ *  the website, calling the model, reading the catalogue, writing the CRM.
+ *  Swapping the runtime is how the same engine runs on WhatsApp, on the web
+ *  assistant, inside the console simulator and under tests with no network or
+ *  database at all.
  *
  *  Order of precedence for a message:
  *
- *    1. Opt-out / opt-in                 — always honoured first
+ *    1. Opt-out / opt-in (WhatsApp)      — always honoured first
  *    2. A person is handling the thread  — stay silent if configured to
- *    3. Button and list taps             — menus, actions, flow answers
- *    4. "menu", greetings                — back to the top
- *    5. Upset, or asking for a person    — hand over with a full summary
- *    6. Enterprise signals               — enterprise mode
- *    7. An open flow                     — take the answer, ask the next thing
- *    8. Natural language                 — quote/demo/support requests start
- *                                          flows; everything else gets a
- *                                          representative's answer and the
+ *    3. Photos and documents             — attached to the request they belong to
+ *    4. Button and list taps             — menus, catalogue, actions, flow answers
+ *    5. "menu", greetings                — back to the top
+ *    6. Upset, or asking for a person    — hand over with a full summary
+ *    7. Corporate signals                — corporate mode
+ *    8. An open flow                     — take the answer, ask the next thing
+ *    9. Natural language                 — quote, service, tracking and callback
+ *                                          requests start flows; everything else
+ *                                          gets a representative's answer and the
  *                                          buttons that fit its intent
  *
  *  Menus never trap anyone: free text works at every point, including in the
@@ -71,23 +75,47 @@ import {
 
 // ------------------------------------------------------------------ Types ---
 
+export interface InboundMedia {
+  /** Meta's media id. */
+  id: string;
+  type: string;
+  mime?: string;
+}
+
 export interface InboundTurn {
   kind: "text" | "reply" | "media" | "location" | "unsupported";
   /** What the customer wrote — or, for a tap, the title of what they tapped. */
   text: string;
   replyId?: string;
+  media?: InboundMedia;
 }
 
 export interface Records {
   lead?: string;
   meeting?: string;
   ticket?: string;
+  quote?: string;
+}
+
+/** The contact details from the company profile the assistant may give out. */
+export interface CompanyContact {
+  phone: string;
+  whatsapp: string;
+  email: string;
+  website: string;
+  address: string;
+  hours: string;
+  offices: Array<{ city: string; address: string; phone: string }>;
 }
 
 export interface TurnContext {
   config: BotConfig;
+  channel: "WEB" | "WHATSAPP";
+  company: CompanyContact;
+  /** Active product categories, for the catalogue and category questions. */
+  categories: Array<{ slug: string; name: string }>;
   language: Language;
-  /** The number the customer is writing from, `+923001234567`. */
+  /** The number the customer is writing from on WhatsApp (`+923001234567`); empty on the web. */
   phone: string;
   profileName?: string;
   isNewConversation: boolean;
@@ -103,13 +131,26 @@ export interface TurnContext {
 export interface ReplyRequest {
   intent: BotIntent;
   classification: Classification;
-  /** Service explainers relevant to this message, authoritative for the answer. */
+  /** Explainers relevant to this message, authoritative for the answer. */
   knowledge: Array<{ title: string; body: string }>;
   /** A flow question still waiting on an answer — the reply must not ask anything else. */
   pendingQuestion?: string;
   details: CustomerDetails;
   state: BotState;
 }
+
+export type TrackResult =
+  | { found: false }
+  | {
+      found: true;
+      reference: string;
+      /** "Service ticket", "Quote request"… */
+      kind: string;
+      status: string;
+      updatedAt: Date;
+      /** What happens next, in a sentence. */
+      next?: string;
+    };
 
 export type Effect =
   | {
@@ -130,6 +171,8 @@ export type Effect =
       force?: boolean;
       nextAction?: string;
       team?: TeamKey;
+      /** Move the lead to this stage if it is earlier in the pipeline. */
+      stage?: "QUOTE_REQUESTED";
     }
   | {
       type: "quote";
@@ -146,7 +189,11 @@ export type Effect =
       state: BotState;
       context: FlowContext;
       team: TeamKey;
-      /** Also hand the conversation to the team (billing and technical issues). */
+      /** When the flow started, so media sent during it is attached. */
+      since?: string;
+      /** A visit time the customer gave in words the extractor could not date. */
+      note?: string;
+      /** Also hand the conversation to the team. */
       handover?: HandoverSummary;
     }
   | {
@@ -171,6 +218,8 @@ export type Effect =
       reference?: string;
     }
   | { type: "alert"; details: CustomerDetails; state: BotState; score: LeadScore; summary: HandoverSummary }
+  /** A photo or document sent after a ticket exists: add it to that ticket. */
+  | { type: "attach"; media: InboundMedia; ticketReference: string }
   | { type: "optOut" }
   | { type: "optIn" };
 
@@ -191,6 +240,12 @@ export interface BotRuntime {
   translate(text: string, language: Language): Promise<string>;
   /** A few plain sentences summarising the conversation for a handover. */
   summarize(): Promise<string>;
+  /** Published products in a category. */
+  products(categorySlug: string): Promise<CatalogProduct[]>;
+  /** One published product. */
+  product(id: string): Promise<CatalogProduct | null>;
+  /** Status of a request, if `reference` exists and belongs to `phone`. */
+  track(reference: string, phone: string): Promise<TrackResult>;
   commit(effect: Effect): Promise<EffectResult>;
 }
 
@@ -202,26 +257,32 @@ export interface TurnResult {
 
 // ---------------------------------------------------------------- Helpers ---
 
-const GOAL_LABELS: Record<string, string> = {
-  leads: "Generate more leads",
-  sales: "Increase sales",
-  advertising: "Improve advertising",
-  google: "Get more Google traffic",
-  social: "Grow social media",
-  automation: "Automate the business",
-  website: "Improve the website",
-  strategy: "Build a growth strategy",
-};
-
 const UNSURE_REPLY =
   /(not sure|i don'?t have (that|this|enough) information|can'?t (answer|help with) that|connect you with (our|the) team|team (se|say) rabta|mujhe (is|iss) ka (ilm|pata) nahi)/i;
 
-const LEGACY_IDS: Record<string, string> = {
-  "act:menu": "a:main_menu",
-  "act:human": "a:talk_to_expert",
-  "act:capture": "a:get_quote",
-  "act:services": "a:main_menu",
+/** Service lines and the flow and ticket category each opens. */
+const SERVICE_FLOW: Partial<Record<BotIntent, { flow: FlowId; category: SupportCategory; label: string }>> = {
+  INSTALLATION: { flow: "installation", category: "INSTALLATION", label: "Installation request" },
+  MAINTENANCE: { flow: "service", category: "MAINTENANCE", label: "Maintenance request" },
+  REPAIR: { flow: "service", category: "REPAIR", label: "Repair request" },
+  TECHNICAL_SUPPORT: { flow: "service", category: "TECHNICAL", label: "Technical support" },
+  PARTS_ACCESSORIES: { flow: "parts", category: "PARTS", label: "Parts request" },
+  CONSUMABLES: { flow: "parts", category: "PARTS", label: "Consumables request" },
 };
+
+/** Words for a machine type, from the product intent a message mentioned. */
+const MACHINE_FOR_INTENT: Partial<Record<BotIntent, string>> = {
+  DIGITAL_DUPLICATOR: "Digital duplicator",
+  PHOTOCOPIER: "Photocopier / MFP",
+  PRINTER: "Printer",
+};
+
+const SAVE_FAILED = {
+  en: "Sorry — something went wrong while saving your request, so it hasn't been submitted yet. Send any message to try again, or tap *Talk to a Person*.",
+};
+
+const NOT_SURE = "not-sure";
+const SAME_NUMBER = "same-number";
 
 /** Run one customer message through the assistant. */
 export async function runTurn(input: InboundTurn, context: TurnContext, runtime: BotRuntime): Promise<TurnResult> {
@@ -253,6 +314,10 @@ class Turn {
     this.startTemperature = context.state.score?.temperature;
   }
 
+  private get whatsapp(): boolean {
+    return this.context.channel === "WHATSAPP";
+  }
+
   // ------------------------------------------------------------ Top level --
 
   async run(): Promise<void> {
@@ -260,15 +325,16 @@ class Turn {
     const text = input.text.trim();
     const typed = input.kind === "text" || input.kind === "location";
 
-    // 1. Subscription controls come before everything, even a paused bot.
-    if (typed && isOptOut(text)) {
+    // 1. Subscription controls come before everything, even a paused bot —
+    //    on WhatsApp, where broadcasts can reach the customer.
+    if (this.whatsapp && typed && isOptOut(text)) {
       await this.runtime.commit({ type: "optOut" });
       await this.event("OPTED_OUT");
       this.state.flow = undefined;
       if (!context.botPaused) await this.say(pick(this.config.messages.optOut, this.language));
       return;
     }
-    if (context.optedOut && typed && (isOptIn(text) || isMenuRequest(text) || isGreetingOnly(text))) {
+    if (this.whatsapp && context.optedOut && typed && (isOptIn(text) || isMenuRequest(text) || isGreetingOnly(text))) {
       await this.runtime.commit({ type: "optIn" });
       await this.event("OPTED_IN");
     }
@@ -278,23 +344,24 @@ class Turn {
     if (context.botPaused) return;
     if (this.state.handover && !this.state.handover.silent && this.config.handover.pauseBot && !(typed && isMenuRequest(text))) return;
 
-    if (input.kind === "media" && !text) {
-      await this.say(pick(this.config.messages.media, this.language));
-      return;
+    // 3. Photos and documents.
+    if (input.kind === "media") {
+      const handled = await this.receiveMedia();
+      if (handled || !text) return;
     }
     if (input.kind === "unsupported" || (!text && !input.replyId)) {
       await this.openNode(this.config.menu.root, 0, { welcome: context.isNewConversation });
       return;
     }
 
-    // 3. Taps.
+    // 4. Taps.
     if (input.replyId) {
-      await this.handleReply(LEGACY_IDS[input.replyId] ?? input.replyId);
+      await this.handleReply(input.replyId);
       await this.finish(true);
       return;
     }
 
-    // 4. Back to the top.
+    // 5. Back to the top.
     if (isMenuRequest(text)) {
       this.state.flow = undefined;
       await this.openNode(this.config.menu.root, 0);
@@ -309,7 +376,7 @@ class Turn {
       return;
     }
 
-    // 5. People first when it matters.
+    // 6. People first when it matters.
     if (isFrustrated(text, this.config.handover.frustrationKeywords)) {
       this.state.flow = undefined;
       await this.handover(this.teamFor(), "Customer is upset and needs a person");
@@ -336,26 +403,58 @@ class Turn {
     // Everything below reads what the customer said.
     await this.learn(text);
 
-    // 6. Enterprise mode, once per conversation.
-    if (!this.state.signals.enterprise && this.state.flow?.id !== "enterprise_requirements") {
+    // 7. Corporate mode, once per conversation.
+    if (!this.state.signals.enterprise && this.state.flow?.id !== "corporate") {
       const signal = detectEnterprise(text, this.details.companySize, this.config.enterprise);
       if (signal.enterprise) {
-        await this.enterEnterpriseMode(signal.reason ?? "enterprise signals");
+        await this.enterEnterpriseMode(signal.reason ?? "corporate signals");
         await this.finish(true);
         return;
       }
     }
 
-    // 7. An open flow takes the message as an answer.
+    // 8. An open flow takes the message as an answer.
     if (this.state.flow) {
       await this.continueFlow(text, classification);
       await this.finish(true);
       return;
     }
 
-    // 8. Natural language.
+    // 9. Natural language.
     await this.converse(text, classification);
     await this.finish(true);
+  }
+
+  // ---------------------------------------------------------------- Media --
+
+  /** A photo or document. Returns true when it was fully handled. */
+  private async receiveMedia(): Promise<boolean> {
+    const { media } = this.input;
+    const { messages } = this.config;
+    if (media) await this.event("ATTACHMENT_RECEIVED", { value: media.type });
+
+    const current = this.currentFlow();
+    if (current && media && current.definition.steps.some((step) => step.field === "attachment")) {
+      current.active.attachments = (current.active.attachments ?? 0) + 1;
+      const acknowledgement = pick(messages.mediaAttached, this.language);
+      if (this.nextStep()) {
+        await this.askNext(acknowledgement);
+      } else {
+        // The photo was the last thing the flow needed: acknowledge it, then complete.
+        await this.say(acknowledgement);
+        await this.askNext();
+        await this.finish(true);
+      }
+      return true;
+    }
+    if (media && this.records.ticket) {
+      await this.runtime.commit({ type: "attach", media, ticketReference: this.records.ticket });
+      await this.say(`${pick(messages.mediaAttached, this.language)} (${this.records.ticket})`);
+      return true;
+    }
+    if (this.input.text.trim()) return false;
+    await this.say(pick(messages.media, this.language));
+    return true;
   }
 
   // ---------------------------------------------------------------- Taps ---
@@ -379,8 +478,12 @@ class Turn {
         return this.confirmName(true);
       case "o":
         return this.confirmName(false);
-      case "dept":
-        return this.openNode(this.config.menu.root, 0);
+      case "cc":
+        return this.showCategories(Number(first) || 0);
+      case "cat":
+        return this.showCategory(first, Number(second) || 0);
+      case "pr":
+        return this.showProduct(first);
       default:
         await this.say(pick(this.config.messages.unknownButton, this.language));
         return this.openNode(this.config.menu.root, 0);
@@ -428,16 +531,13 @@ class Turn {
     if (node.kind === "service") {
       this.setIntent(node.intent);
       this.state.team = node.team;
-      if (node.serviceSlug) this.details.service = node.serviceSlug;
-      if (node.subService) {
-        this.details.subService = node.subService;
-        this.state.subService = node.subService;
-      }
+      if (node.categorySlug) this.details.productCategory = node.categorySlug;
+      if (node.interest) this.details.interest = node.interest;
       this.remember(pick(node.title, "en"));
       await this.event("SERVICE_VIEWED", { value: nodeId, intent: node.intent, team: node.team });
 
       const body = await this.localise(node.body);
-      await this.offer(this.fillCopy(body), this.actionChoices(node.actions), { footer: pick(config.messages.footer, language) });
+      await this.offer(this.fillCopy(body), this.actionChoices(node.actions), { footer: this.footer() });
       return;
     }
 
@@ -476,6 +576,12 @@ class Turn {
       case "pricing":
         return this.showPricing(hint.intent ?? this.currentServiceIntent());
 
+      case "catalog":
+        return ref.category ? this.showCategory(ref.category, 0) : this.showCategories(0);
+
+      case "contact":
+        return this.showContact();
+
       case "request": {
         await this.event(ref.event, { intent: this.state.intent });
         await this.sync({ force: true, nextAction: ref.nextAction });
@@ -491,6 +597,130 @@ class Turn {
     }
   }
 
+  // ------------------------------------------------------------ Catalogue --
+
+  private async showCategories(pageNumber: number): Promise<void> {
+    const { categories } = this.context;
+    const { messages } = this.config;
+    await this.event("CATALOG_VIEWED");
+    if (!categories.length) {
+      await this.offer(
+        this.fillCopy(pick(messages.categoryEmpty, this.language), { category: "" }),
+        this.actionChoices(["get_quote", "request_callback", "main_menu"])
+      );
+      return;
+    }
+    const rows: Choice[] = categories.map((category) => ({ id: `cat:${category.slug}`, title: category.name }));
+    rows.push({ id: "a:main_menu", title: pick(messages.mainMenu, this.language) });
+    await this.offer(pick(messages.catalogIntro, this.language), rows, {
+      pageId: (next) => `cc:${next}`,
+      page: pageNumber,
+      forceList: true,
+    });
+  }
+
+  private async showCategory(slug: string, pageNumber: number): Promise<void> {
+    const { messages } = this.config;
+    const category = this.context.categories.find((entry) => entry.slug === slug);
+    if (!category) {
+      await this.say(pick(messages.unknownButton, this.language));
+      return this.showCategories(0);
+    }
+
+    this.details.productCategory = category.slug;
+    this.details.interest = category.name;
+    const intent = this.intentForCategory(category.slug);
+    if (intent) this.setIntent(intent);
+    this.remember(category.name);
+    await this.event("CATALOG_VIEWED", { value: category.slug, intent });
+
+    const products = await this.runtime.products(category.slug).catch(() => [] as CatalogProduct[]);
+    if (!products.length) {
+      await this.offer(
+        this.fillCopy(pick(messages.categoryEmpty, this.language), { category: category.name }),
+        this.actionChoices(["get_quote", "request_callback", "talk_to_sales"])
+      );
+      return;
+    }
+
+    const rows: Choice[] = products.map((product) => ({
+      id: `pr:${product.id}`,
+      title: product.name,
+      description: [product.brand?.name, product.model, AVAILABILITY_LABEL[product.availability]].filter(Boolean).join(" · "),
+      imageUrl: product.images[0],
+    }));
+    rows.push({ id: "a:get_quote", title: pick(this.config.actions.get_quote.title, this.language) });
+    await this.offer(this.fillCopy(pick(messages.categoryIntro, this.language), { category: category.name }), rows, {
+      pageId: (next) => `cat:${category.slug}:${next}`,
+      page: pageNumber,
+      forceList: true,
+    });
+  }
+
+  private async showProduct(id: string): Promise<void> {
+    const product = await this.runtime.product(id).catch(() => null);
+    if (!product) {
+      await this.say(pick(this.config.messages.unknownButton, this.language));
+      return this.showCategories(0);
+    }
+
+    this.state.productId = product.id;
+    this.details.productId = product.id;
+    this.details.interest = product.name;
+    if (product.category) {
+      this.details.productCategory = product.category.slug;
+      const intent = this.intentForCategory(product.category.slug);
+      if (intent) this.setIntent(intent);
+    }
+    this.remember(product.name);
+    await this.event("PRODUCT_VIEWED", { value: product.id });
+
+    const specs = product.specifications.slice(0, 6).map((spec) => `• ${spec.label}: ${spec.value}`);
+    const features = product.features.slice(0, 4).map((feature) => `• ${feature}`);
+    const docs = product.documents.slice(0, 2).map((doc) => `📄 ${doc.title}: ${doc.url}`);
+    const body = [
+      `*${product.name}*`,
+      [product.brand?.name, product.model ? `Model ${product.model}` : null, product.sku ? `SKU ${product.sku}` : null]
+        .filter(Boolean)
+        .join(" · "),
+      product.summary ?? "",
+      specs.length ? `*Specifications*\n${specs.join("\n")}` : "",
+      features.length ? `*Features*\n${features.join("\n")}` : "",
+      `*Availability:* ${AVAILABILITY_LABEL[product.availability]}`,
+      docs.join("\n"),
+      pick(this.config.messages.productActions, this.language),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    await this.offer(body, this.actionChoices(["get_quote", "request_callback", "talk_to_sales"]), {
+      header: product.images[0] ? { imageUrl: product.images[0] } : undefined,
+    });
+  }
+
+  private async showContact(): Promise<void> {
+    const { company } = this.context;
+    const { messages } = this.config;
+    const lines = [
+      company.phone && `📞 ${company.phone}`,
+      company.whatsapp && `💬 WhatsApp: ${company.whatsapp}`,
+      company.email && `✉️ ${company.email}`,
+      company.address && `📍 ${company.address}`,
+      ...company.offices.map((office) => `📍 ${office.city}${office.address ? ` — ${office.address}` : ""}${office.phone ? ` · ${office.phone}` : ""}`),
+      company.hours && `🕘 ${company.hours}`,
+      company.website && `🌐 ${company.website}`,
+    ].filter(Boolean);
+
+    if (!lines.length) {
+      await this.offer(pick(messages.contactMissing, this.language), this.actionChoices(["request_callback", "talk_to_sales", "main_menu"]));
+      return;
+    }
+    await this.offer(
+      `${pick(messages.contactIntro, this.language)}\n\n${lines.join("\n")}`,
+      this.actionChoices(["request_callback", "talk_to_sales", "main_menu"])
+    );
+  }
+
   // ------------------------------------------------------ Natural language --
 
   private async converse(text: string, classification: Classification): Promise<void> {
@@ -499,28 +729,38 @@ class Turn {
 
     if (service) this.setIntent(service);
     if (classification.primary !== "GENERAL_INQUIRY") this.details.topic = classification.primary;
+    const issue = wordCount(text) >= 4 ? text : undefined;
 
     // Requests that have a flow of their own start it straight away.
-    if (request === "QUOTE") {
-      return this.startFlow("quote", this.contextFor(service));
-    }
-    if (request === "DEMO") {
-      return this.startFlow("demo", this.contextFor(service ?? "WHATBOT_PRO"));
-    }
-    // The message describing the problem is the ticket description.
-    if (request === "BILLING") {
-      return this.startFlow(
-        "support",
-        { intent: "BILLING", supportCategory: "BILLING", topicLabel: "Billing", team: "BILLING" },
-        wordCount(text) >= 4 ? text : undefined
-      );
-    }
-    if (request === "SUPPORT" && !service) {
-      return this.startFlow(
-        "support",
-        { intent: "SUPPORT", supportCategory: "TECHNICAL", topicLabel: "Support request" },
-        wordCount(text) >= 4 ? text : undefined
-      );
+    switch (request) {
+      case "QUOTE":
+        return this.startFlow("quote", this.contextFor(service));
+      case "DEMO":
+        return this.startFlow("demo", this.contextFor(service));
+      case "CALLBACK":
+        return this.startFlow("callback", this.contextFor(service));
+      case "TRACK_REQUEST":
+        return this.startFlow("track", {}, undefined, findReference(text));
+      case "PRODUCTS":
+        if (!service || !this.categoryForIntent(service)) return this.showCategories(0);
+        return this.showCategory(this.categoryForIntent(service)!, 0);
+      case "BILLING":
+        return this.startFlow(
+          "support",
+          { intent: "BILLING", supportCategory: "BILLING", topicLabel: "Billing", team: "ACCOUNTS" },
+          issue
+        );
+      case "SERVICE_REQUEST": {
+        const line = (service && SERVICE_FLOW[service]) || SERVICE_FLOW.REPAIR!;
+        if (service && MACHINE_FOR_INTENT[service] && !this.details.machineType) {
+          this.details.machineType = MACHINE_FOR_INTENT[service];
+        }
+        return this.startFlow(
+          line.flow,
+          { intent: "SERVICE_REQUEST", supportCategory: line.category, topicLabel: line.label, team: line.flow === "parts" ? "PARTS" : "SERVICE" },
+          issue
+        );
+      }
     }
 
     const intent = service ?? request ?? this.state.intent ?? "GENERAL_INQUIRY";
@@ -535,7 +775,7 @@ class Turn {
     if (!reply.trim()) {
       this.state.fallbacks += 1;
       await this.event("FALLBACK", { intent });
-      await this.offer(pick(config.messages.busy, this.language), this.actionChoices(["talk_to_expert", "main_menu"]));
+      await this.offer(pick(config.messages.busy, this.language), this.actionChoices(["talk_to_person", "main_menu"]));
       return;
     }
 
@@ -545,7 +785,7 @@ class Turn {
     if (this.state.fallbacks >= config.handover.lowConfidenceTurns) {
       this.state.fallbacks = 0;
       await this.say(reply);
-      await this.offer(pick(config.messages.lowConfidence, this.language), this.actionChoices(["talk_to_expert", "main_menu"]));
+      await this.offer(pick(config.messages.lowConfidence, this.language), this.actionChoices(["talk_to_person", "main_menu"]));
       return;
     }
 
@@ -556,10 +796,16 @@ class Turn {
 
     const pricingActions =
       request === "PRICING" ? config.pricing.find((entry) => entry.intents.includes(intent))?.actions : undefined;
-    const actions = pricingActions ?? config.intents[intent]?.actions ?? config.intents.GENERAL_INQUIRY?.actions ?? [];
+    const actions =
+      pricingActions ??
+      (request === "PRICING" ? ["get_quote", "request_callback", "talk_to_sales"] : undefined) ??
+      config.intents[intent]?.actions ??
+      config.intents.GENERAL_INQUIRY?.actions ??
+      [];
     await this.offer(reply, this.actionChoices(actions));
   }
 
+  /** The explainer for an intent, plus the product the customer has open. */
   private knowledgeFor(intent: BotIntent): ReplyRequest["knowledge"] {
     const nodeId = this.config.intents[intent]?.node;
     const node = nodeId ? this.config.menu.nodes[nodeId] : undefined;
@@ -569,32 +815,31 @@ class Turn {
 
   // ---------------------------------------------------------------- Flows ---
 
-  /** `issue` is the customer's own description of a problem, for a support flow. */
-  private async startFlow(id: FlowId, context: FlowContext, issue?: string): Promise<void> {
+  /**
+   * `issue` is the customer's own description of a problem, for a ticket flow;
+   * `reference` a reference number to track, when the message carried one.
+   */
+  private async startFlow(id: FlowId, context: FlowContext, issue?: string, reference?: string): Promise<void> {
     const flow = this.config.flows[id];
     if (!flow) return this.openNode(this.config.menu.root, 0);
 
-    // A ticket describes this problem, not the project discussed earlier.
+    // A ticket describes this problem, not what was discussed earlier.
     if (flow.completion === "ticket") this.details.requirements = issue;
+    // Each tracking request asks afresh unless the message named a reference.
+    if (id === "track") this.details.trackingReference = reference;
 
     const intent = context.intent ?? flow.intent;
     if (intent) this.setIntent(intent);
     this.state.team = context.team ?? flow.team;
 
-    if (context.serviceSlug) this.details.service = context.serviceSlug;
-    if (context.subService) {
-      this.details.subService = context.subService;
-      this.state.subService = context.subService;
-    }
-    if (context.goal && !this.details.businessGoal && GOAL_LABELS[context.goal]) {
-      this.details.businessGoal = GOAL_LABELS[context.goal];
-    }
+    if (context.categorySlug) this.details.productCategory = context.categorySlug;
+    if (context.interest) this.details.interest = context.interest;
     if (context.supportCategory) {
-      this.details.intent = "SUPPORT";
+      this.details.intent = "SERVICE";
       this.details.supportCategory = context.supportCategory;
     }
     if (id === "demo") this.state.signals.wantsDemo = true;
-    if (id === "strategy_call") this.state.signals.wantsCall = true;
+    if (id === "callback") this.state.signals.wantsCall = true;
     if (id === "quote") this.state.signals.wantsQuote = true;
 
     this.state.flow = {
@@ -618,13 +863,19 @@ class Turn {
     return active && definition ? { active, definition } : null;
   }
 
+  private applies(step: FlowStep, active: ActiveFlow): boolean {
+    if (step.goals && !step.goals.includes(active.context.goal ?? "")) return false;
+    if (step.channels && !step.channels.includes(this.context.channel)) return false;
+    return true;
+  }
+
   /** The next unanswered step of the open flow, or null when it is complete. */
   private nextStep() {
     const current = this.currentFlow();
     if (!current) return null;
     const { active, definition } = current;
     for (const step of definition.steps) {
-      if (step.goals && !step.goals.includes(active.context.goal ?? "")) continue;
+      if (!this.applies(step, active)) continue;
       if (active.skipped.includes(step.field)) continue;
       if (this.known(step.field, active)) continue;
       return step;
@@ -635,10 +886,16 @@ class Turn {
   private known(field: StepField, active: ActiveFlow): boolean {
     const d = this.details;
     switch (field) {
-      case "meetingSlot":
+      case "visitSlot":
         return Boolean((d.meetingDate && d.meetingTime) || active.meetingNote);
-      case "service":
-        return Boolean(d.service || d.subService);
+      case "productCategory":
+        return Boolean(d.productCategory || d.productId);
+      case "phone":
+        return Boolean(d.phone || (this.whatsapp && this.context.phone));
+      case "whatsapp":
+        return Boolean(d.whatsapp || this.whatsapp);
+      case "attachment":
+        return !this.whatsapp || (active.attachments ?? 0) > 0;
       default:
         return Boolean(d[field as keyof CustomerDetails]);
     }
@@ -686,30 +943,36 @@ class Turn {
       return;
     }
 
-    const quick = (step.quickAnswers ?? []).map((option, index) => ({
-      id: `q:${step.field}:${index}`,
-      title: pick(option.title, this.language),
-    }));
+    const quick = (step.quickAnswers ?? [])
+      // "Same number" only makes sense once there is a number.
+      .filter((option) => option.value !== SAME_NUMBER || this.details.phone)
+      .map((option, index) => ({ id: `q:${step.field}:${index}`, title: pick(option.title, this.language) }));
     await this.offer(lead(question), [...quick, ...skip]);
   }
 
   private optionsFor(step: { options?: ChoiceOption[]; optionsFrom?: string }): ChoiceOption[] {
     if (step.options?.length) return step.options;
-    const { options, countries } = this.config;
+    const { options } = this.config;
     switch (step.optionsFrom) {
-      case "services":
-        return options.services;
+      case "categories":
+        return [
+          ...this.context.categories.map((category) => ({
+            value: category.slug,
+            title: { en: category.name },
+            categorySlug: category.slug,
+          })),
+          { value: NOT_SURE, title: { en: "🤔 Not sure yet", ur_roman: "🤔 Abhi pata nahi", ur: "🤔 ابھی معلوم نہیں" } },
+        ];
+      case "machines":
+        return options.machines;
+      case "quantities":
+        return options.quantities;
+      case "budgets":
+        return options.budgets;
       case "timelines":
         return options.timelines;
-      case "budgets": {
-        const country = countryByName(this.details.country, countries);
-        return country?.currency === "PKR" ? options.budgets.PKR : options.budgets.USD;
-      }
-      case "countries":
-        return [
-          ...countries.map((country) => ({ value: country.name, title: { en: `${country.flag} ${country.name}` } })),
-          { value: "Other", title: { en: "🌍 Other", ur_roman: "🌍 Koi aur", ur: "🌍 کوئی اور" } },
-        ];
+      case "contactMethods":
+        return options.contactMethods;
       default:
         return [];
     }
@@ -718,12 +981,9 @@ class Turn {
   /** A tapped option — or quick answer — for the question the flow is waiting on. */
   private async answerChoice(field: StepField, index: number, quick: boolean): Promise<void> {
     const current = this.currentFlow();
-    const step = current?.definition.steps.find(
-      (candidate) =>
-        candidate.field === field &&
-        (!candidate.goals || candidate.goals.includes(current.active.context.goal ?? ""))
-    );
-    const option = step ? (quick ? step.quickAnswers ?? [] : this.optionsFor(step))[index] : undefined;
+    const step = current?.definition.steps.find((candidate) => candidate.field === field && this.applies(candidate, current.active));
+    const pool = step ? (quick ? (step.quickAnswers ?? []).filter((o) => o.value !== SAME_NUMBER || this.details.phone) : this.optionsFor(step)) : [];
+    const option = pool[index];
 
     if (!current || !step || !option) {
       await this.say(pick(this.config.messages.unknownButton, this.language));
@@ -758,17 +1018,18 @@ class Turn {
     const { active } = current;
     const field = active.pending;
     const step = field
-      ? current.definition.steps.find(
-          (candidate) => candidate.field === field && (!candidate.goals || candidate.goals.includes(active.context.goal ?? ""))
-        )
+      ? current.definition.steps.find((candidate) => candidate.field === field && this.applies(candidate, active))
       : undefined;
 
-    // A new quote or demo request replaces what was in progress.
+    // A new quote, demo or tracking request replaces what was in progress.
     if (classification.request === "QUOTE" && active.id !== "quote") {
       return this.startFlow("quote", this.contextFor(classification.service));
     }
     if (classification.request === "DEMO" && active.id !== "demo") {
-      return this.startFlow("demo", this.contextFor(classification.service ?? "WHATBOT_PRO"));
+      return this.startFlow("demo", this.contextFor(classification.service));
+    }
+    if (classification.request === "TRACK_REQUEST" && active.id !== "track" && findReference(text)) {
+      return this.startFlow("track", {}, undefined, findReference(text));
     }
 
     if (!field || !step || this.known(field, active)) {
@@ -778,7 +1039,7 @@ class Turn {
     }
 
     // A question in the middle of a flow gets a real answer, then the flow resumes.
-    if (isQuestion(text) || (classification.request === "PRICING" && wordCount(text) > 2)) {
+    if (field !== "requirements" && (isQuestion(text) || (classification.request === "PRICING" && wordCount(text) > 2))) {
       const intent = classification.service ?? this.state.intent ?? "GENERAL_INQUIRY";
       const reply = await this.runtime.reply({
         intent,
@@ -802,12 +1063,15 @@ class Turn {
         this.apply(field, matched.value, matched);
         return this.askNext();
       }
-      if (field === "service" && classification.service) {
-        const byIntent = options.find((option) => option.intent === classification.service);
-        this.apply(field, byIntent?.value ?? text, byIntent);
-        return this.askNext();
+      if (field === "productCategory" && classification.service) {
+        const slug = this.categoryForIntent(classification.service);
+        const byIntent = options.find((option) => option.categorySlug === slug);
+        if (byIntent) {
+          this.apply(field, byIntent.value, byIntent);
+          return this.askNext();
+        }
       }
-      // A short free-text answer is still an answer: "Qatar", "about $2k".
+      // A short free-text answer is still an answer: "Multan", "about 3 lakh".
       if (wordCount(text) <= 8) {
         this.apply(field, text);
         return this.askNext();
@@ -816,7 +1080,7 @@ class Turn {
     }
 
     // Text questions.
-    if (field === "meetingSlot") {
+    if (field === "visitSlot") {
       active.retries += 1;
       if (active.retries < 2) {
         await this.say(pick(this.config.messages.meetingSlotRetry, this.language));
@@ -824,6 +1088,11 @@ class Turn {
       }
       // The extractor could not turn it into a date; keep their words for the team.
       active.meetingNote = text;
+      return this.askNext();
+    }
+    if (field === "attachment") {
+      // Words instead of a photo: move on rather than insist.
+      active.skipped.push("attachment");
       return this.askNext();
     }
 
@@ -849,20 +1118,44 @@ class Turn {
   private apply(field: StepField, value: string, option?: ChoiceOption): void {
     const d = this.details;
     switch (field) {
-      case "service":
-        if (option?.serviceSlug) d.service = option.serviceSlug;
-        if (!this.state.flow?.context.subService) d.subService = option?.value ?? value;
+      case "productCategory": {
+        if (value === NOT_SURE) {
+          d.interest = d.interest ?? "Not sure yet — needs a recommendation";
+          this.state.flow?.skipped.push("productCategory");
+          return;
+        }
+        const category = this.context.categories.find((entry) => entry.slug === (option?.categorySlug ?? value));
+        if (category) {
+          d.productCategory = category.slug;
+          d.interest = d.interest && d.productId ? d.interest : category.name;
+          const intent = this.intentForCategory(category.slug);
+          if (intent) this.setIntent(intent);
+        } else {
+          d.interest = value;
+          this.state.flow?.skipped.push("productCategory");
+        }
+        return;
+      }
+      case "machineType":
+        d.machineType = option ? pick(option.title, "en").replace(/^\P{L}+/u, "").trim() : value;
         if (option?.intent) this.setIntent(option.intent);
         return;
+      case "whatsapp":
+        d.whatsapp = value === SAME_NUMBER ? d.phone : value;
+        return;
       case "meetingMode":
-        if (["OFFICE", "ZOOM", "GOOGLE_MEET", "WHATSAPP"].includes(value)) {
+        if (["SITE_VISIT", "PHONE_CALL", "WHATSAPP", "OFFICE", "ZOOM", "GOOGLE_MEET"].includes(value)) {
           d.meetingMode = value as CustomerDetails["meetingMode"];
         }
         return;
-      case "meetingSlot":
+      case "priority":
+        if (["LOW", "NORMAL", "HIGH", "URGENT"].includes(value)) d.priority = value as CustomerDetails["priority"];
         return;
-      case "companySize":
-        d.companySize = value;
+      case "trackingReference":
+        d.trackingReference = value.toUpperCase();
+        return;
+      case "visitSlot":
+      case "attachment":
         return;
       default:
         (d as Record<string, string>)[field] = value;
@@ -876,8 +1169,10 @@ class Turn {
     const team = context.team ?? definition.team;
     this.state.flow = undefined;
 
+    if (definition.completion === "track") return this.completeTracking();
+
     const intent: CustomerIntent =
-      definition.completion === "ticket" ? "SUPPORT" : definition.completion === "meeting" ? "CONSULTATION" : "PROJECT";
+      definition.completion === "ticket" ? "SERVICE" : definition.completion === "meeting" ? "APPOINTMENT" : "PURCHASE";
     this.details.intent = intent;
 
     const score = this.score();
@@ -891,32 +1186,32 @@ class Turn {
         break;
       }
       case "quote": {
-        await this.sync({ force: true, nextAction: definition.nextAction, team });
+        await this.sync({ force: true, nextAction: definition.nextAction, team, stage: "QUOTE_REQUESTED" });
         const result = await this.runtime.commit({
           type: "quote",
           details: this.details,
           state: this.state,
           score,
-          title: this.serviceLabel() ?? "Project quotation",
+          title: this.serviceLabel() ?? "Quotation request",
           nextAction: definition.nextAction,
           team,
         });
         reference = result.reference ?? this.records.lead;
+        if (result.reference) this.records.quote = result.reference;
         break;
       }
       case "brief": {
         brief = projectBrief(this.details, id);
-        if (!this.details.requirements || id !== "enterprise_requirements") {
-          this.details.requirements = plainBrief(this.details, id);
-        }
+        if (!this.details.requirements) this.details.requirements = plainBrief(this.details, id);
         const result = await this.sync({ force: true, nextAction: definition.nextAction, team });
         reference = result.leadReference;
         break;
       }
       case "ticket": {
-        const serious = context.supportCategory === "BILLING" || context.supportCategory === "TECHNICAL";
+        const category = context.supportCategory ?? "GENERAL";
+        const serious = category === "COMPLAINT" || category === "BILLING" || this.details.priority === "URGENT";
         const summary = serious
-          ? await this.summary(team, `${context.topicLabel ?? "Support"} request from an existing client`)
+          ? await this.summary(team, `${context.topicLabel ?? "Support request"}${this.details.priority === "URGENT" ? " — machine down" : ""}`)
           : undefined;
         const result = await this.runtime.commit({
           type: "ticket",
@@ -924,12 +1219,15 @@ class Turn {
           state: this.state,
           context,
           team,
+          since: active.startedAt,
+          note: active.meetingNote,
           handover: summary,
         });
         reference = result.reference;
-        if (reference) this.records.ticket = reference;
-        if (summary && reference) {
-          this.state.handover = { team, reference, at: this.context.now.toISOString(), reason: summary.reason };
+        if (!reference) break;
+        this.records.ticket = reference;
+        if (summary) {
+          this.state.handover = { team, reference, at: this.context.now.toISOString(), reason: summary.reason, silent: true };
         }
         await this.event("TICKET_CREATED", { value: context.topicLabel, team });
         break;
@@ -955,6 +1253,15 @@ class Turn {
         return;
     }
 
+    // Never confirm a request that was not saved. The answers are kept, so the
+    // next message tries again.
+    if (!reference) {
+      this.state.flow = { ...active, pending: undefined, retries: 0 };
+      await this.event("FALLBACK", { value: `save-failed:${id}` });
+      await this.offer(pick(this.config.messages.saveFailed ?? SAVE_FAILED, this.language), this.actionChoices(["talk_to_person", "main_menu"]));
+      return;
+    }
+
     if (definition.escalate) {
       const summary = await this.summary(team, `${pick(definition.title, "en")} submitted`);
       const result = await this.runtime.commit({
@@ -974,8 +1281,39 @@ class Turn {
     const body = this.fillCopy(pick(definition.done.body, this.language), {
       reference,
       brief: brief ? fill(pick(this.config.messages.brief, this.language), { brief }) : undefined,
+      machine: machineLine(this.details),
     });
     await this.offer(body, this.actionChoices(definition.done.actions));
+  }
+
+  private async completeTracking(): Promise<void> {
+    const { messages, flows } = this.config;
+    const reference = this.details.trackingReference;
+    const phone = this.whatsapp ? this.context.phone : this.details.phone ?? "";
+    await this.event("TRACK_REQUESTED", { value: reference });
+
+    const result: TrackResult =
+      reference && phone ? await this.runtime.track(reference, phone).catch(() => ({ found: false }) as const) : { found: false };
+    this.details.trackingReference = undefined;
+
+    if (!result.found) {
+      await this.offer(
+        fill(pick(messages.trackNotFound, this.language), { reference }),
+        this.actionChoices(["track_request", "talk_to_support", "main_menu"])
+      );
+      return;
+    }
+    const updated = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Karachi" }).format(result.updatedAt);
+    await this.offer(
+      fill(pick(messages.trackFound, this.language), {
+        reference: result.reference,
+        type: result.kind,
+        status: result.status,
+        updated,
+        next: result.next,
+      }),
+      this.actionChoices(flows.track?.done.actions ?? ["main_menu"])
+    );
   }
 
   // ------------------------------------------------------------- Handover ---
@@ -1022,9 +1360,11 @@ class Turn {
         team: config.teams[team]?.label ?? team,
         reference: result.reference,
       }),
-      open ? "" : this.fillCopy(pick(config.messages.handoverOffHours, language), {
-        nextOpen: nextOpening(config.businessHours, this.context.now),
-      }),
+      open
+        ? ""
+        : this.fillCopy(pick(config.messages.handoverOffHours, language), {
+            nextOpen: nextOpening(config.businessHours, this.context.now),
+          }),
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -1051,14 +1391,14 @@ class Turn {
   private async enterEnterpriseMode(reason: string): Promise<void> {
     this.state.signals.enterprise = true;
     this.state.flow = undefined;
-    this.state.team = "ENTERPRISE";
-    this.details.topic = "ENTERPRISE";
-    await this.event("ENTERPRISE_DETECTED", { value: reason, team: "ENTERPRISE" });
+    this.state.team = "CORPORATE";
+    this.details.topic = "CORPORATE";
+    await this.event("ENTERPRISE_DETECTED", { value: reason, team: "CORPORATE" });
 
-    // The enterprise team hears about it now, not after the customer picks a button.
-    await this.handover("ENTERPRISE", `Enterprise opportunity (${reason})`, { silent: true });
+    // The corporate team hears about it now, not after the customer picks a button.
+    await this.handover("CORPORATE", `Corporate or bulk enquiry (${reason})`, { silent: true });
 
-    const actions = this.config.intents.ENTERPRISE?.actions ?? ["book_strategy_call", "submit_requirements", "enterprise_expert"];
+    const actions = this.config.intents.CORPORATE?.actions ?? ["corporate_requirements", "request_callback", "talk_to_sales"];
     await this.offer(pick(this.config.messages.enterprise, this.language), this.actionChoices(actions));
   }
 
@@ -1070,17 +1410,15 @@ class Turn {
 
     if (!entries.length) {
       const body = fill(pick(config.messages.pricingUnavailable, language), {
-        service: this.serviceLabel() ?? (language === "en" ? "this service" : "is service"),
+        service: this.serviceLabel() ?? (language === "en" ? "this" : "is"),
       });
-      await this.offer(body, this.actionChoices(["get_quote", "book_strategy_call", "talk_to_expert"]));
+      await this.offer(body, this.actionChoices(["get_quote", "request_callback", "talk_to_sales"]));
       return;
     }
 
     await this.event("PRICING_VIEWED", { intent, value: entries.map((entry) => entry.id).join(",") });
     for (const [index, entry] of entries.entries()) {
-      const body = [pick(entry.summary, language), entry.details ? pick(entry.details, language) : ""]
-        .filter(Boolean)
-        .join("\n\n");
+      const body = [pick(entry.summary, language), entry.details ? pick(entry.details, language) : ""].filter(Boolean).join("\n\n");
       if (index < entries.length - 1) await this.say(body);
       else await this.offer(body, this.actionChoices(entry.actions));
     }
@@ -1089,17 +1427,14 @@ class Turn {
   private async showProof(section: ProofSection): Promise<void> {
     const items = this.config.proof[section];
     if (!items.length) {
-      await this.offer(
-        pick(this.config.messages.proofEmpty, this.language),
-        this.actionChoices(["book_strategy_call", "main_menu"])
-      );
+      await this.offer(pick(this.config.messages.proofEmpty, this.language), this.actionChoices(["request_callback", "main_menu"]));
       return;
     }
     const body = items
       .slice(0, 6)
       .map((item) => [`*${item.title}*`, item.summary, item.link].filter(Boolean).join("\n"))
       .join("\n\n");
-    await this.offer(body, this.actionChoices(["book_strategy_call", "get_quote", "main_menu"]));
+    await this.offer(body, this.actionChoices(["get_quote", "request_callback", "main_menu"]));
   }
 
   // --------------------------------------------------------- Understanding --
@@ -1113,17 +1448,8 @@ class Turn {
       const industry = detectIndustry(text);
       if (industry) this.details.businessType = industry;
     }
-
-    if (!this.details.country) {
-      const match = detectCountry(
-        { message: text, website: this.details.website, phone: this.context.phone },
-        this.config.countries
-      );
-      if (match) this.details.country = match.country.name;
-    } else {
-      // Normalise "dubai" or "ksa" to the configured country name.
-      const named = countryByName(this.details.country, this.config.countries);
-      if (named) this.details.country = named.name;
+    if (this.details.productCategory && !this.context.categories.some((c) => c.slug === this.details.productCategory)) {
+      delete this.details.productCategory;
     }
   }
 
@@ -1132,9 +1458,22 @@ class Turn {
     const entry = this.config.intents[intent];
     if (isServiceIntent(intent)) {
       this.details.topic = intent;
-      if (entry?.serviceSlug && !this.details.service) this.details.service = entry.serviceSlug;
-      if (entry?.subService && !this.details.subService) this.details.subService = entry.subService;
+      if (entry?.categorySlug && !this.details.productCategory && this.context.categories.some((c) => c.slug === entry.categorySlug)) {
+        this.details.productCategory = entry.categorySlug;
+      }
+      if (entry?.interest && !this.details.interest) this.details.interest = entry.interest;
     }
+  }
+
+  private intentForCategory(slug: string): BotIntent | undefined {
+    return (Object.entries(this.config.intents) as Array<[BotIntent, BotConfig["intents"][BotIntent]]>).find(
+      ([intent, entry]) => entry?.categorySlug === slug && isServiceIntent(intent)
+    )?.[0];
+  }
+
+  private categoryForIntent(intent: BotIntent): string | undefined {
+    const slug = this.config.intents[intent]?.categorySlug;
+    return slug && this.context.categories.some((category) => category.slug === slug) ? slug : undefined;
   }
 
   private currentServiceIntent(): BotIntent | undefined {
@@ -1144,7 +1483,12 @@ class Turn {
   private contextFor(service: BotIntent | undefined): FlowContext {
     if (!service) return {};
     const entry = this.config.intents[service];
-    return { intent: service, serviceSlug: entry?.serviceSlug, subService: entry?.subService, team: entry?.team };
+    return {
+      intent: service,
+      categorySlug: this.categoryForIntent(service),
+      interest: entry?.interest,
+      team: SERVICE_LINE_INTENTS.includes(service) ? undefined : entry?.team,
+    };
   }
 
   private teamFor(): TeamKey {
@@ -1153,8 +1497,11 @@ class Turn {
     return (intent && this.config.intents[intent]?.team) || "SALES";
   }
 
+  /** What the conversation is about, in words: the product, category or service. */
   private serviceLabel(): string | undefined {
-    if (this.details.subService) return this.details.subService;
+    if (this.details.interest) return this.details.interest;
+    const category = this.context.categories.find((entry) => entry.slug === this.details.productCategory);
+    if (category) return category.name;
     const nodeId = this.state.intent ? this.config.intents[this.state.intent]?.node : undefined;
     const node = nodeId ? this.config.menu.nodes[nodeId] : undefined;
     return node ? pick(node.title, "en").replace(/^\P{L}+/u, "").trim() : undefined;
@@ -1172,7 +1519,7 @@ class Turn {
 
   // ------------------------------------------------------------ Finishing ---
 
-  private async sync(options: { force?: boolean; nextAction?: string; team?: TeamKey } = {}): Promise<EffectResult> {
+  private async sync(options: { force?: boolean; nextAction?: string; team?: TeamKey; stage?: "QUOTE_REQUESTED" } = {}): Promise<EffectResult> {
     const score = this.score();
     this.state.score = score;
     const result = await this.runtime.commit({
@@ -1183,6 +1530,7 @@ class Turn {
       force: options.force,
       nextAction: options.nextAction,
       team: options.team ?? this.teamFor(),
+      stage: options.stage,
     });
     this.synced = true;
     if (result.leadReference) {
@@ -1230,6 +1578,10 @@ class Turn {
       }));
   }
 
+  private footer(): string | undefined {
+    return this.whatsapp ? pick(this.config.messages.footer, this.language) : undefined;
+  }
+
   private async say(body: string): Promise<void> {
     if (body.trim()) await this.runtime.send({ type: "text", body: body.trim() });
   }
@@ -1237,7 +1589,7 @@ class Turn {
   private async offer(
     body: string,
     choices: Choice[],
-    options: { pageId?: (page: number) => string; page?: number; footer?: string; forceList?: boolean } = {}
+    options: { pageId?: (page: number) => string; page?: number; footer?: string; forceList?: boolean; header?: { imageUrl: string } } = {}
   ): Promise<void> {
     const { messages } = this.config;
     for (const message of offer(body, choices, {
@@ -1257,17 +1609,16 @@ class Turn {
   }
 
   private fillCopy(template: string, extra: TemplateValues = {}): string {
-    const { contact } = this.config;
+    const { company } = this.context;
     return fill(template, {
       name: this.details.name ?? this.context.profileName,
       company: this.details.company,
       service: this.serviceLabel(),
-      phone: contact.businessPhone,
-      whatsapp: contact.whatsappCta,
-      hours: pick(contact.hours, this.language),
-      website: contact.website,
-      whatbotUrl: contact.whatbotUrl,
-      email: contact.email,
+      phone: company.phone,
+      whatsapp: company.whatsapp,
+      hours: company.hours,
+      website: company.website,
+      email: company.email,
       ...extra,
     });
   }
@@ -1282,7 +1633,7 @@ class Turn {
 
 // ------------------------------------------------------ Answer handling -----
 
-/** An option the customer typed rather than tapped: "2", "google", "not sure". */
+/** An option the customer typed rather than tapped: "2", "photocopier", "not sure". */
 export function matchOption(text: string, options: ChoiceOption[], language: Language): ChoiceOption | undefined {
   const raw = text.trim();
   const numeric = /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
@@ -1317,12 +1668,19 @@ export function acceptText(field: StepField, text: string): string | null {
       if (name.length < 2 || name.length > 60 || /\d|@/.test(name) || wordCount(name) > 5) return null;
       return name;
     }
+    case "phone":
+    case "whatsapp": {
+      const digits = value.replace(/\D/g, "");
+      return /^[+\d\s()-]+$/.test(value) && digits.length >= 10 && digits.length <= 15 ? value : null;
+    }
     case "email":
       return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value) ? value.toLowerCase() : null;
-    case "website":
-      // Word boundary: "novaclinics.ae" starts with "no" and is very much a website.
-      if (/^(no|none|nahi|nahin|not yet|don'?t have)\b(?!\.)/i.test(value)) return "No website yet";
-      return /([a-z0-9-]+\.)+[a-z]{2,}/i.test(value) ? value : null;
+    case "trackingReference":
+      return findReference(value) ?? null;
+    case "city":
+      return value.length >= 2 && value.length <= 80 && !/\d{4,}/.test(value) ? value : null;
+    case "serialNumber":
+      return value.length <= 60 ? value : null;
     default:
       return value.length <= 1500 ? value : value.slice(0, 1500);
   }

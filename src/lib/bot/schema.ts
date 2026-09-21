@@ -7,6 +7,7 @@ import {
   OPTION_SOURCES,
   PROOF_SECTIONS,
   STEP_FIELDS,
+  SUPPORT_CATEGORIES,
   TEAM_KEYS,
   TEMPERATURES,
   TRAFFIC_SOURCES,
@@ -22,14 +23,17 @@ import {
  *
  *  The shape of everything an administrator can change without touching code.
  *  The configuration is split into sections, each stored as its own row in
- *  `settings` (`bot.<section>`), so saving the pricing cannot clobber someone
- *  else's edit to the menu a minute earlier.
+ *  `settings` (`proslink.bot.<section>`), so saving the menu cannot clobber
+ *  someone else's edit to the flows a minute earlier.
  *
  *  Each section is validated on save *and* on load: a stored section that no
  *  longer matches the schema (after an upgrade, say) is ignored in favour of
  *  the built-in default rather than taking the assistant down.
  *
- *  Isomorphic — the Chatbot Studio validates in the browser with the same code.
+ *  Contact details are not here: they belong to the company profile (Admin →
+ *  Settings), which the site shares with the assistant.
+ *
+ *  Isomorphic — Chatbot Studio validates in the browser with the same code.
  * =============================================================================
  */
 
@@ -50,7 +54,7 @@ const choiceOption = z.object({
   value: text,
   title: localized,
   description: localized.optional(),
-  serviceSlug: z.string().optional(),
+  categorySlug: z.string().optional(),
   intent: intent.optional(),
   immediate: z.boolean().optional(),
   highValue: z.boolean().optional(),
@@ -60,10 +64,10 @@ const choiceOption = z.object({
 const flowContext = z.object({
   intent: intent.optional(),
   team: team.optional(),
-  serviceSlug: z.string().optional(),
-  subService: z.string().optional(),
+  categorySlug: z.string().optional(),
+  interest: z.string().optional(),
   goal: z.string().optional(),
-  supportCategory: z.enum(["TECHNICAL", "BILLING", "SALES", "COMPLAINT", "GENERAL"]).optional(),
+  supportCategory: z.enum(SUPPORT_CATEGORIES).optional(),
   topicLabel: z.string().optional(),
 });
 
@@ -72,6 +76,8 @@ const actionRef = z.discriminatedUnion("type", [
   z.object({ type: z.literal("flow"), flow: flowId, context: flowContext.optional() }),
   z.object({ type: z.literal("handover"), team: team.optional() }),
   z.object({ type: z.literal("pricing") }),
+  z.object({ type: z.literal("catalog"), category: z.string().optional() }),
+  z.object({ type: z.literal("contact") }),
   z.object({
     type: z.literal("request"),
     event: z.enum(BOT_EVENT_TYPES),
@@ -99,8 +105,8 @@ const menuNode = z.discriminatedUnion("kind", [
     description: localized.optional(),
     intent,
     team,
-    serviceSlug: z.string().optional(),
-    subService: z.string().optional(),
+    categorySlug: z.string().optional(),
+    interest: z.string().optional(),
     body: localized,
     actions: z.array(text),
   }),
@@ -122,6 +128,7 @@ const flowStep = z.object({
   optionsFrom: z.enum(OPTION_SOURCES).optional(),
   optional: z.boolean().optional(),
   goals: z.array(text).optional(),
+  channels: z.array(z.enum(["WEB", "WHATSAPP"])).optional(),
   quickAnswers: z.array(choiceOption).max(2).optional(),
 });
 
@@ -139,28 +146,24 @@ const flowDefinition = z.object({
 });
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use 24-hour HH:MM");
+const proofItems = z.array(z.object({ title: text, summary: text, link: z.string().url().optional() }));
 
 // ---------------------------------------------------------------- Sections --
 
 export const sectionSchemas = {
-  contact: z.object({
-    /** The WhatsApp Business number the assistant runs on — share it in wa.me links, QR codes and ads. */
-    whatsappCta: z.string(),
-    businessPhone: z.string(),
-    email: z.string(),
-    website: z.string(),
-    whatbotUrl: z.string(),
-    address: z.string(),
-    hours: localized,
-  }),
-
-  businessHours: z.object({
-    timezone: text,
-    /** 0 = Sunday … 6 = Saturday. */
-    days: z.array(z.number().int().min(0).max(6)).min(1),
-    open: hhmm,
-    close: hhmm,
-  }),
+  /**
+   * When the team is available. Null until someone enters real hours: the
+   * assistant then never tells a customer the team is closed.
+   */
+  businessHours: z
+    .object({
+      timezone: text,
+      /** 0 = Sunday … 6 = Saturday. */
+      days: z.array(z.number().int().min(0).max(6)).min(1),
+      open: hhmm,
+      close: hhmm,
+    })
+    .nullable(),
 
   personality: z.object({
     assistantName: text,
@@ -180,6 +183,7 @@ export const sectionSchemas = {
     optOut: localized,
     optIn: localized,
     media: localized,
+    mediaAttached: localized,
     busy: localized,
     nameConfirm: localized,
     nameConfirmYes: localized,
@@ -197,6 +201,16 @@ export const sectionSchemas = {
     lowConfidence: localized,
     unknownButton: localized,
     brief: localized,
+    catalogIntro: localized,
+    categoryEmpty: localized,
+    categoryIntro: localized,
+    productActions: localized,
+    contactIntro: localized,
+    contactMissing: localized,
+    trackFound: localized,
+    trackNotFound: localized,
+    /** Optional so a messages section saved before it existed still validates. */
+    saveFailed: localized.optional(),
   }),
 
   menu: z.object({
@@ -212,8 +226,10 @@ export const sectionSchemas = {
     intent,
     z.object({
       team,
-      serviceSlug: z.string().optional(),
-      subService: z.string().optional(),
+      /** Product category it maps to. */
+      categorySlug: z.string().optional(),
+      /** What the lead is interested in, in words, e.g. "Photocopier / MFP". */
+      interest: z.string().optional(),
       /** Menu node that explains it. */
       node: z.string().optional(),
       /** Buttons offered under an answer about it. */
@@ -224,27 +240,12 @@ export const sectionSchemas = {
   ),
 
   options: z.object({
-    services: z.array(choiceOption).min(1),
-    budgets: z.object({ USD: z.array(choiceOption).min(1), PKR: z.array(choiceOption).min(1) }),
+    machines: z.array(choiceOption).min(1),
+    quantities: z.array(choiceOption).min(1),
+    budgets: z.array(choiceOption).min(1),
     timelines: z.array(choiceOption).min(1),
+    contactMethods: z.array(choiceOption).min(1),
   }),
-
-  countries: z
-    .array(
-      z.object({
-        code: z.string().length(2),
-        name: text,
-        flag: z.string(),
-        /** ISO 4217. Budgets are offered in PKR for PKR and in US dollars otherwise. */
-        currency: z.string().length(3),
-        dialCodes: z.array(z.string().regex(/^\d{1,4}$/)),
-        /** Canadian and US numbers share +1, so area codes tell them apart. */
-        areaCodes: z.array(z.string().regex(/^\d{3}$/)).optional(),
-        tlds: z.array(z.string()),
-        keywords: z.array(z.string()),
-      })
-    )
-    .min(1),
 
   pricing: z.array(
     z.object({
@@ -261,7 +262,7 @@ export const sectionSchemas = {
     team,
     z.object({
       label: text,
-      /** Where this team's notifications go. Empty means the sales inbox. */
+      /** Where this team's email notifications go. Empty means the sales inbox. */
       emails: z.array(z.string().email()),
       /** Console users (by email) new leads for this team are assigned to. */
       ownerEmails: z.array(z.string().email()),
@@ -271,13 +272,14 @@ export const sectionSchemas = {
   scoring: z.object({
     weights: z.object({
       businessIdentified: z.number().int().min(0).max(100),
-      websiteProvided: z.number().int().min(0).max(100),
-      clearService: z.number().int().min(0).max(100),
+      clearRequirement: z.number().int().min(0).max(100),
+      quantityProvided: z.number().int().min(0).max(100),
+      largeOrder: z.number().int().min(0).max(100),
       budgetProvided: z.number().int().min(0).max(100),
-      immediateTimeline: z.number().int().min(0).max(100),
-      enterprise: z.number().int().min(0).max(100),
       highBudget: z.number().int().min(0).max(100),
-      wantsStrategyCall: z.number().int().min(0).max(100),
+      immediateTimeline: z.number().int().min(0).max(100),
+      corporate: z.number().int().min(0).max(100),
+      wantsCallback: z.number().int().min(0).max(100),
       wantsDemo: z.number().int().min(0).max(100),
     }),
     /** Lowest score of each band; below `warm` is Cold. */
@@ -286,10 +288,10 @@ export const sectionSchemas = {
       hot: z.number().int().min(1).max(100),
       highPriority: z.number().int().min(1).max(100),
     }),
-    /** A budget at or above this, in US dollars, counts as high value. */
-    highBudgetUsd: z.number().positive(),
-    /** Rupees per dollar, used only to compare a PKR budget with the threshold. */
-    pkrPerUsd: z.number().positive(),
+    /** A stated budget at or above this, in rupees, counts as high value. */
+    highBudgetPkr: z.number().positive(),
+    /** A stated quantity at or above this counts as a large order. */
+    largeOrderQuantity: z.number().int().positive(),
   }),
 
   enterprise: z.object({
@@ -342,14 +344,9 @@ export const sectionSchemas = {
   }),
 
   proof: z.object({
-    caseStudies: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    results: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    websites: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    aiProjects: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    whatsappProjects: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    campaigns: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    reviews: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
-    industries: z.array(z.object({ title: text, summary: text, link: z.string().url().optional() })),
+    references: proofItems,
+    installations: proofItems,
+    reviews: proofItems,
   }),
 
   broadcastCategories: z.array(
@@ -430,6 +427,10 @@ export function crossReferenceIssues(config: BotConfig): string[] {
   for (const teamKey of TEAM_KEYS) {
     if (!config.teams[teamKey as TeamKey]) issues.push(`Team ${teamKey} is missing.`);
   }
+  for (const key of ["main_menu", "talk_to_person", "get_quote", "request_callback"]) {
+    if (!actions[key]) issues.push(`The engine needs the action "${key}".`);
+  }
+  if (!nodes.expert) issues.push(`The engine needs the menu "expert" (who to talk to).`);
 
   const { warm, hot, highPriority } = config.scoring.bands;
   if (!(warm < hot && hot < highPriority)) {

@@ -1,4 +1,4 @@
-import type { ProductAvailability } from "@prisma/client";
+import type { CatalogCategory, CatalogProduct } from "./catalog-types";
 import { prisma } from "@/lib/db";
 import { DEPARTMENT } from "@/config/brand";
 import { DEFAULT_CATEGORIES } from "@/data/catalog";
@@ -16,41 +16,7 @@ import { DEFAULT_CATEGORIES } from "@/data/catalog";
  * =============================================================================
  */
 
-export interface CatalogCategory {
-  id: string | null;
-  slug: string;
-  name: string;
-  description: string | null;
-  icon: string | null;
-  productCount: number;
-}
-
-export interface CatalogProduct {
-  id: string;
-  slug: string;
-  name: string;
-  sku: string | null;
-  model: string | null;
-  summary: string | null;
-  description: string | null;
-  images: string[];
-  features: string[];
-  specifications: Array<{ label: string; value: string }>;
-  documents: Array<{ title: string; url: string }>;
-  availability: ProductAvailability;
-  category: { slug: string; name: string } | null;
-  brand: { name: string } | null;
-  keywords: string[];
-}
-
-export const AVAILABILITY_LABEL: Record<ProductAvailability, string> = {
-  IN_STOCK: "In stock",
-  LIMITED_STOCK: "Limited stock",
-  OUT_OF_STOCK: "Out of stock",
-  ON_ORDER: "Available to order",
-  ON_REQUEST: "Availability confirmed on request",
-  DISCONTINUED: "Discontinued",
-};
+export * from "./catalog-types";
 
 const CACHE_MS = 30_000;
 let cache: { categories: CatalogCategory[]; products: CatalogProduct[]; brands: string[]; at: number } | null = null;

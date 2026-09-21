@@ -15,7 +15,6 @@ import { Card } from "@/components/ui/card";
 import { DbNotice, EmptyState, PageHeader, StatCard } from "@/components/admin/ui";
 import { requirePagePermission } from "@/lib/staff";
 import { dashboardStats } from "@/lib/admin/queries";
-import { findService } from "@/data/marketing/services";
 import { formatDateTime, formatPkr, humanise } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard" };
@@ -204,7 +203,7 @@ function RankedList({ rows }: { rows: Array<{ label: string; count: number }> })
         <li key={row.label}>
           <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
             <span className="truncate font-medium">
-              {findService(row.label)?.name ?? humanise(row.label)}
+              {humanise(row.label)}
             </span>
             <span className="shrink-0 font-semibold tabular-nums text-muted-foreground">
               {row.count}

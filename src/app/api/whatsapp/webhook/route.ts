@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  *  Register this URL in Meta ▸ WhatsApp ▸ Configuration ▸ Webhook and subscribe
  *  to the `messages` field:
  *
- *      https://your-domain.com/api/whatsapp/webhook
+ *      https://ai.pros-link.com/api/whatsapp/webhook
  *
  *  GET  — Meta's one-time verification handshake.
  *  POST — every inbound customer message and delivery receipt.

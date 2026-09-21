@@ -119,6 +119,9 @@ export interface InboundMessage {
   replyId?: string;
   /** Human label for a media message, used in the transcript. */
   mediaKind?: string;
+  /** Meta's media id and MIME type — the file is fetched on demand from the console. */
+  mediaId?: string;
+  mediaMime?: string;
   /** Click-to-WhatsApp ad attribution, when Meta supplied it. */
   referral?: WhatsAppInboundMessage["referral"];
 }

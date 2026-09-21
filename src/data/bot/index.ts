@@ -1,6 +1,6 @@
 import type { BotConfig } from "@/lib/bot/schema";
-import { DEFAULT_BUSINESS_HOURS, DEFAULT_CONTACT, DEFAULT_MESSAGES, DEFAULT_PERSONALITY } from "./copy";
-import { DEFAULT_COUNTRIES, DEFAULT_FLOWS, DEFAULT_OPTIONS } from "./flows";
+import { DEFAULT_BUSINESS_HOURS, DEFAULT_MESSAGES, DEFAULT_PERSONALITY } from "./copy";
+import { DEFAULT_FLOWS, DEFAULT_OPTIONS } from "./flows";
 import { DEFAULT_ACTIONS, DEFAULT_MENU } from "./menu";
 import {
   DEFAULT_BROADCAST_CATEGORIES,
@@ -16,12 +16,11 @@ import {
 } from "./settings";
 
 /**
- * The WhatsApp assistant as it ships. Admin → Chatbot Studio overrides any
- * section of this; a section nobody has changed keeps following these defaults,
- * including when a later release improves them.
+ * The Pros-Link Assistant as it ships. Admin → Chatbot Studio overrides any
+ * section of this; a section nobody has changed keeps following these
+ * defaults, including when a later release improves them.
  */
 export const DEFAULT_BOT_CONFIG: BotConfig = {
-  contact: DEFAULT_CONTACT,
   businessHours: DEFAULT_BUSINESS_HOURS,
   personality: DEFAULT_PERSONALITY,
   messages: DEFAULT_MESSAGES,
@@ -30,7 +29,6 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   flows: DEFAULT_FLOWS,
   intents: DEFAULT_INTENTS,
   options: DEFAULT_OPTIONS,
-  countries: DEFAULT_COUNTRIES,
   pricing: DEFAULT_PRICING,
   teams: DEFAULT_TEAMS,
   scoring: DEFAULT_SCORING,

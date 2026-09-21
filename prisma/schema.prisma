@@ -196,11 +196,14 @@ enum TicketCategory {
   CALLBACK
 }
 
+/// How an appointment happens. SITE_VISIT is at the customer's premises.
 enum MeetingMode {
   OFFICE
   ZOOM
   GOOGLE_MEET
   WHATSAPP
+  SITE_VISIT
+  PHONE_CALL
 }
 
 enum MeetingStatus {

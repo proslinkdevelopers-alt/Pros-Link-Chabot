@@ -14,6 +14,8 @@ import { runTurn } from "@/lib/bot/engine";
 import { attribute, stripRefCode } from "@/lib/bot/source";
 import { readBotState } from "@/lib/bot/types";
 import { createWhatsAppRuntime } from "@/lib/bot/whatsapp-runtime";
+import { contactOf, getCompanyProfile } from "@/lib/company";
+import { listCategories } from "@/lib/catalog";
 import { markAsRead, toDisplayPhone } from "./client";
 import type { InboundMessage } from "./types";
 
@@ -34,9 +36,8 @@ import type { InboundMessage } from "./types";
  *    5. saves what the engine learned and remembers for the next message.
  *
  *  Menus, flows, intents, scoring and handover all live in the engine; this
- *  file knows nothing about them. The same brain as the website chat answers
- *  open questions — `planAssistantTurn` retrieves from the knowledge base and
- *  builds the system prompt — so the two channels cannot drift apart.
+ *  file knows nothing about them. The web assistant runs the same engine with
+ *  the same CRM runtime, so the two channels cannot drift apart.
  *
  *  Every path is defensive: this runs inside a webhook Meta will retry on any
  *  non-200, so a failure here must be logged and swallowed, never thrown.
@@ -90,7 +91,7 @@ async function route(message: InboundMessage): Promise<void> {
   // Staff can silence a number without disconnecting the integration.
   if (contact.isBlocked) return;
 
-  const botConfig = await getBotConfig();
+  const [botConfig, company, categories] = await Promise.all([getBotConfig(), getCompanyProfile(), listCategories()]);
   const text = stripRefCode(message.text);
   const { conversation, created } = await resolveConversation(message, phone, contact.profileName, botConfig.sources);
 
@@ -128,8 +129,11 @@ async function route(message: InboundMessage): Promise<void> {
     profileName: contact.profileName ?? undefined,
     language,
     config: botConfig,
+    company: contactOf(company),
+    categories: categories.map(({ slug, name }) => ({ slug, name })),
     history,
     leadId: capture.leadId,
+    customerId: capture.customerId,
     attribution: {
       trafficSource: conversation.trafficSource,
       campaign: conversation.campaign,
@@ -139,9 +143,17 @@ async function route(message: InboundMessage): Promise<void> {
   });
 
   const result = await runTurn(
-    { kind: message.kind, text, replyId: message.replyId },
+    {
+      kind: message.kind,
+      text,
+      replyId: message.replyId,
+      media: message.mediaId ? { id: message.mediaId, type: message.mediaKind ?? "file", mime: message.mediaMime } : undefined,
+    },
     {
       config: botConfig,
+      channel: "WHATSAPP",
+      company: contactOf(company),
+      categories: categories.map(({ slug, name }) => ({ slug, name })),
       language,
       phone,
       profileName: contact.profileName ?? undefined,
@@ -154,13 +166,14 @@ async function route(message: InboundMessage): Promise<void> {
         lead: capture.leadReference,
         meeting: capture.meetingReference,
         ticket: capture.ticketReference,
+        quote: capture.quoteReference,
       },
       now,
     },
     runtime
   );
 
-  await saveTurn(conversation.id, result.details, result.state, runtime.records);
+  await saveTurn(conversation.id, result.details, result.state, runtime.records, result.state.intent);
 }
 
 // ------------------------------------------------------------- Conversation --
@@ -190,9 +203,9 @@ async function upsertContact(message: InboundMessage, phone: string) {
  * assistant recalls the service discussed an hour ago, and the CRM shows one
  * coherent transcript instead of a row per message.
  *
- * A new thread is attributed once, from its first message. A thread that
- * belonged to the retired BITSOL Institute is never reused — the console hides
- * it, so continuing it would file new messages where nobody can see them.
+ * A new thread is attributed once, from its first message. Only this tenant's
+ * threads are reused — the console shows nothing else, so continuing another
+ * thread would file new messages where nobody can see them.
  */
 async function resolveConversation(
   message: InboundMessage,
@@ -207,7 +220,7 @@ async function resolveConversation(
       channel: "WHATSAPP",
       contactPhone: phone,
       updatedAt: { gte: since },
-      OR: [{ department: DEPARTMENT }, { department: null }],
+      department: DEPARTMENT,
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -284,7 +297,15 @@ async function recordInbound(conversationId: string, message: InboundMessage, te
         department: DEPARTMENT,
         language: LANGUAGE_MAP[detectLanguage(text)],
         externalId: message.id,
+        mediaId: message.mediaId ?? null,
+        mediaType: message.mediaId ? message.mediaKind ?? null : null,
+        mediaMime: message.mediaId ? message.mediaMime ?? null : null,
       },
+    });
+    // A new customer message makes the thread unread and reopens it.
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastInboundAt: new Date(), status: "OPEN", closedAt: null },
     });
     return true;
   } catch (error) {

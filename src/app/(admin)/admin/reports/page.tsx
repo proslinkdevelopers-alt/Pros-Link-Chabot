@@ -4,7 +4,6 @@ import { dashboardStats, OWN, safeQuery } from "@/lib/admin/queries";
 import { DbNotice, PageHeader, StatCard } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
 import { MessagesSquare, Percent, Timer, TrendingUp } from "lucide-react";
-import { findService } from "@/data/marketing/services";
 import { humanise } from "@/lib/utils";
 
 export const metadata = { title: "Reports & Analytics" };
@@ -143,7 +142,7 @@ export default async function ReportsPage() {
         <Breakdown
           title="Most requested services"
           rows={stats.popularServices.map((r) => ({
-            label: findService(r.label)?.name ?? r.label,
+            label: r.label,
             count: r.count,
           }))}
         />

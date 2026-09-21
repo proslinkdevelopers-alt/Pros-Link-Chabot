@@ -1,57 +1,50 @@
 /** Shared domain types used by both client and server code. */
 
 import type { Language } from "@/lib/i18n";
+import type { Outgoing } from "@/lib/bot/render";
 
 export type { Language } from "@/lib/i18n";
+export type { Outgoing, Choice } from "@/lib/bot/render";
 
 // ------------------------------------------------------------------- Chat ---
 
-export type ChatRole = "user" | "assistant";
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-  createdAt?: string;
-  /** CRM records this reply's turn created, shown as receipts under the bubble. */
-  records?: CapturedRecord[];
-}
-
-/** A tappable quick-reply / suggestion surfaced to the user. */
-export interface QuickReply {
-  label: string;
-  /** The text sent to the assistant when tapped (defaults to `label`). */
-  value?: string;
-}
-
 /**
- * A CRM record created from what the customer said in conversation — a lead,
- * a consultation request or a support ticket.
+ * A CRM record a conversation created — shown to the customer as a receipt
+ * with its reference number.
  */
 export interface CapturedRecord {
-  kind: "LEAD" | "MEETING" | "TICKET";
+  kind: "LEAD" | "QUOTE" | "MEETING" | "TICKET";
   reference: string;
 }
 
-/** SSE event payloads streamed from /api/chat to the browser. */
-export type ChatStreamEvent =
-  | { type: "meta"; language: Language }
-  | { type: "chunk"; text: string }
-  | {
-      type: "done";
-      ticketId?: string;
-      /** Quick replies; an empty list means the reply is waiting on an answer. */
-      suggestions?: string[];
-    }
-  /** Sent after `done`, once the customer's details have reached the CRM. */
-  | { type: "capture"; records: CapturedRecord[] }
-  | { type: "error"; message: string };
+/** One turn from the web assistant's browser to `/api/chat`. */
+export interface ChatTurnRequest {
+  conversationRef: string;
+  input: { kind: "text" | "reply"; text: string; replyId?: string };
+}
+
+/** The assistant's answer to one turn. */
+export interface ChatTurnResponse {
+  reference: string;
+  language: Language;
+  messages: Outgoing[];
+  records: CapturedRecord[];
+  /** A person from the team has the conversation; their replies arrive by polling. */
+  staffHandling: boolean;
+}
+
+/** A message a staff member wrote from the console, fetched by the web assistant. */
+export interface StaffReply {
+  id: string;
+  body: string;
+  at: string;
+}
 
 // -------------------------------------------------------- Knowledge base ----
 
 export type KnowledgeKind = "FAQ" | "ARTICLE" | "SERVICE" | "POLICY" | "DOCUMENT";
 
-/** One entry in the BITSOL Marketing knowledge base. */
+/** One entry in the knowledge base. */
 export interface KnowledgeEntry {
   id: string;
   kind: KnowledgeKind;
@@ -61,87 +54,9 @@ export interface KnowledgeEntry {
   keywords: string[];
 }
 
-// ------------------------------------------------------------- Catalogues ---
-
-/** Pricing is a placeholder until BITSOL publishes final rate cards. */
-export interface PricePlaceholder {
-  /** Human-readable starting point, e.g. "From PKR 45,000". */
-  startingAt: string;
-  /** Billing shape, e.g. "one-time project" or "monthly retainer". */
-  model: string;
-  /** Always shown so the assistant never presents a price as final. */
-  note: string;
-}
-
-export interface FaqItem {
-  question: string;
-  answer: string;
-}
-
-/** A BITSOL Marketing service, rendered in the menu and answered from the KB. */
-export interface ServiceItem {
-  slug: string;
-  name: string;
-  group: string;
-  tagline: string;
-  overview: string;
-  benefits: string[];
-  features: string[];
-  process: string[];
-  pricing: PricePlaceholder;
-  portfolio: string[];
-  faqs: FaqItem[];
-  keywords: string[];
-}
-
-/** A menu entry shown in the chat menu panel. */
-export interface MenuEntry {
-  id: string;
-  label: string;
-  labelUr: string;
-  /** Prompt sent to the assistant when tapped. */
-  prompt: string;
-  children?: MenuEntry[];
-}
-
 // ------------------------------------------------------------ Submissions ---
 
-export interface LeadSubmission {
-  name: string;
-  company?: string;
-  phone: string;
-  email?: string;
-  businessType?: string;
-  service?: string;
-  budget?: string;
-  timeline?: string;
-  requirements: string;
-  conversationRef?: string;
-}
-
-export interface MeetingSubmission {
-  name: string;
-  phone: string;
-  email?: string;
-  businessName?: string;
-  preferredDate: string;
-  preferredTime: string;
-  mode: "OFFICE" | "ZOOM" | "GOOGLE_MEET" | "WHATSAPP";
-  topic?: string;
-  conversationRef?: string;
-}
-
-export interface TicketSubmission {
-  category: "TECHNICAL" | "BILLING" | "SALES" | "COMPLAINT" | "GENERAL";
-  name: string;
-  phone?: string;
-  email?: string;
-  subject: string;
-  description: string;
-  conversationRef?: string;
-}
-
-/** Uniform shape returned by every submission endpoint. */
+/** Uniform shape returned by the public submission endpoints. */
 export interface SubmissionResult {
   ok: boolean;
   reference?: string;

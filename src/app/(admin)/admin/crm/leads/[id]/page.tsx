@@ -8,7 +8,6 @@ import { ActivityComposer } from "@/components/admin/ActivityComposer";
 import { prisma } from "@/lib/db";
 import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
-import { findService } from "@/data/marketing/services";
 import { LEAD_STAGES } from "@/lib/admin/leads";
 import { formatDateTime, formatPkr, humanise } from "@/lib/utils";
 
@@ -52,7 +51,7 @@ export default async function LeadDetailPage({
   const lead = data.lead;
   if (!lead) notFound();
 
-  const service = lead.serviceSlug ? findService(lead.serviceSlug) : undefined;
+  const service = lead.subService ? { name: lead.subService } : undefined;
 
   return (
     <>

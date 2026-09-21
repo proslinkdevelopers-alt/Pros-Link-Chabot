@@ -7,113 +7,118 @@ import { BOT_INTENTS, SERVICE_INTENTS, type BotIntent } from "./types";
  *  Deterministic detection
  * =============================================================================
  *
- *  Everything the router has to decide *before* a model is involved: which
- *  intent a message expresses, whether the customer is upset, wants a person,
- *  wants to stop receiving messages, or is describing an enterprise.
+ *  Everything the router decides *before* a model is involved: which product
+ *  or service a message is about, what the customer wants to happen, whether
+ *  they are upset, want a person, want to stop receiving messages, or are
+ *  describing a corporate or bulk requirement.
  *
  *  Keyword work on purpose. It is instant, free, testable and predictable —
- *  the model still writes every open-ended reply and reads the details back
- *  out afterwards, but it never decides whether a ticket gets opened.
+ *  the model still writes every open-ended reply, but it never decides whether
+ *  a ticket gets opened.
  *
  *  Keywords cover English, Roman Urdu and Urdu script, and administrators can
- *  add more per intent from the studio.
+ *  add more per intent from Chatbot Studio.
  * =============================================================================
  */
 
 type Weighted = Array<[phrase: string, weight: number]>;
 
-/** Service intents: what the customer is interested in. */
+/** What the message is about: product areas and service lines. */
 const SERVICE_KEYWORDS: Partial<Record<BotIntent, Weighted>> = {
-  WHATBOT_PRO: [["whatbot", 6], ["what bot", 5], ["whatbot pro", 6]],
-  WHATSAPP_CHATBOT: [
-    ["whatsapp chatbot", 5], ["whatsapp chat bot", 5], ["whatsapp bot", 5], ["whatsapp ai", 5],
-    ["whatsapp automation", 5], ["whatsapp api", 5], ["whatsapp business api", 5], ["cloud api", 3],
-    ["team inbox", 3], ["shared inbox", 3], ["whatsapp broadcast", 4], ["bulk whatsapp", 4],
-    ["whatsapp marketing", 3], ["whatsapp", 2], ["watsapp", 2], ["whatsap", 2], ["واٹس ایپ", 2],
+  DIGITAL_DUPLICATOR: [
+    ["digital duplicator", 7], ["duplicator", 6], ["duplicating machine", 6], ["risograph", 6], ["riso", 5],
+    ["duplo", 5], ["stencil machine", 5], ["ڈپلیکیٹر", 6], ["ڈوپلیکیٹر", 6],
   ],
-  AI_SALES_AGENT: [["ai sales agent", 6], ["sales agent", 3], ["ai sales", 4], ["sales bot", 4], ["ai sdr", 5]],
-  AI_CUSTOMER_SUPPORT: [
-    ["ai customer support", 6], ["customer support bot", 5], ["support bot", 4], ["ai support", 4],
-    ["chatbot", 2], ["chat bot", 2], ["website chatbot", 4], ["live chat", 2], ["چیٹ بوٹ", 2],
+  PHOTOCOPIER: [
+    ["photocopier", 6], ["photo copier", 6], ["photocopy machine", 6], ["photostat machine", 6], ["copier", 5],
+    ["copy machine", 5], ["fotocopy", 5], ["photostat", 5], ["photocopy", 4], ["mfp", 5], ["multifunction", 5],
+    ["multi function", 5], ["all in one printer", 5], ["فوٹو کاپی", 5], ["فوٹو اسٹیٹ", 5], ["فوٹوسٹیٹ", 5],
   ],
-  AI_AGENT: [
-    ["ai agent", 5], ["ai agents", 5], ["autonomous agent", 5], ["agentic", 4], ["ai employee", 4],
-    ["ai receptionist", 5], ["virtual receptionist", 5], ["receptionist", 2],
+  PRINTER: [
+    ["laser printer", 6], ["inkjet printer", 6], ["printer", 5], ["inkjet", 4], ["print machine", 4], ["پرنٹر", 5],
   ],
-  N8N_AUTOMATION: [["n8n", 6], ["make.com", 5], ["zapier", 4], ["integromat", 4]],
-  CRM: [["crm", 4], ["hubspot", 4], ["zoho", 3], ["salesforce", 4], ["lead management system", 4], ["سی آر ایم", 4]],
-  AI_AUTOMATION: [
-    ["automation", 3], ["automate", 3], ["automated", 2], ["workflow", 2], ["ai solution", 3],
-    ["artificial intelligence", 2], ["ai integration", 3], ["ai", 1], ["آٹومیشن", 3], ["khudkar", 2],
+  OFFICE_EQUIPMENT: [
+    ["office equipment", 6], ["office machine", 5], ["office machines", 5], ["shredder", 4], ["paper shredder", 5],
+    ["laminator", 4], ["laminating machine", 5], ["binding machine", 4], ["paper cutter", 4],
   ],
-  SEO: [
-    ["seo", 5], ["search engine", 4], ["rank on google", 5], ["google ranking", 5], ["first page", 3],
-    ["google maps", 3], ["local seo", 6], ["organic traffic", 4], ["backlinks", 4], ["ranking", 2],
-    ["google traffic", 4], ["ایس ای او", 5],
+  OFFICE_SUPPLIES: [
+    ["office supplies", 6], ["stationery", 5], ["stationary", 4], ["a4 paper", 5], ["copy paper", 5], ["paper ream", 5],
+    ["photocopy paper", 6], ["photostat paper", 6], ["printing paper", 5],
+    ["paper rim", 5], ["legal paper", 4], ["کاغذ", 3], ["سٹیشنری", 5],
   ],
-  META_ADS: [
-    ["meta ads", 6], ["facebook ads", 6], ["instagram ads", 6], ["fb ads", 6], ["boost post", 4],
-    ["facebook marketing", 3], ["instagram marketing", 3], ["retargeting", 3], ["remarketing", 3],
+  CONSUMABLES: [
+    ["toner", 6], ["toner cartridge", 6], ["ink cartridge", 6], ["cartridge", 5], ["refill", 3], ["ink", 3],
+    ["drum unit", 5], ["drum", 3], ["master roll", 5], ["consumables", 5], ["ٹونر", 6], ["کارٹریج", 5],
   ],
-  GOOGLE_ADS: [
-    ["google ads", 6], ["adwords", 6], ["ppc", 5], ["youtube ads", 5], ["search ads", 4],
-    ["performance max", 5], ["google shopping", 4],
+  PARTS_ACCESSORIES: [
+    ["spare parts", 6], ["spare part", 6], ["replacement part", 6], ["parts", 3], ["accessories", 4], ["roller", 3],
+    ["fuser", 4], ["pickup roller", 5], ["پرزے", 4], ["پارٹس", 4],
   ],
-  TIKTOK_ADS: [["tiktok ads", 6], ["tiktok marketing", 5], ["tiktok", 3], ["tik tok", 3], ["ٹک ٹاک", 3]],
-  SOCIAL_MEDIA: [
-    ["social media", 4], ["smm", 4], ["linkedin", 3], ["page management", 3], ["followers", 2],
-    ["instagram page", 3], ["facebook page", 3], ["سوشل میڈیا", 4],
+  INSTALLATION: [
+    ["installation", 5], ["install", 5], ["installing", 5], ["set up", 3], ["setup", 3], ["lagwana", 3],
+    ["fit karwana", 4], ["انسٹالیشن", 5], ["انسٹال", 5],
   ],
-  LEAD_GENERATION: [
-    ["lead generation", 5], ["leads", 3], ["more customers", 4], ["more clients", 4], ["new customers", 3],
-    ["customers chahiye", 4], ["clients chahiye", 4], ["increase sales", 3], ["grow my business", 3],
-    ["enquiries", 2], ["inquiries", 2], ["marketing", 1], ["لیڈز", 3], ["گاہک", 2],
+  MAINTENANCE: [
+    ["maintenance", 5], ["servicing", 5], ["service contract", 6], ["maintenance contract", 6], ["amc", 5],
+    ["annual maintenance", 6], ["preventive maintenance", 6], ["مینٹیننس", 5], ["سروسنگ", 5],
   ],
-  CONTENT: [["content marketing", 5], ["content writing", 5], ["copywriting", 4], ["blog", 3], ["articles", 2]],
-  BRANDING: [["branding", 5], ["logo", 4], ["brand identity", 5], ["rebrand", 5], ["برانڈنگ", 5]],
-  WEBSITE: [
-    ["website", 4], ["web site", 4], ["landing page", 4], ["wordpress", 4], ["webpage", 3],
-    ["web page", 3], ["ویب سائٹ", 4], ["site", 1],
+  REPAIR: [
+    ["repair", 5], ["repairing", 5], ["fix", 3], ["fixing", 3], ["marammat", 5], ["theek karwana", 4],
+    ["ٹھیک کروانا", 4], ["ریپئر", 5], ["مرمت", 5],
   ],
-  E_COMMERCE: [
-    ["ecommerce", 5], ["e-commerce", 5], ["e commerce", 5], ["online store", 5], ["shopify", 5],
-    ["woocommerce", 5], ["online shop", 5],
+  TECHNICAL_SUPPORT: [
+    ["technical support", 6], ["tech support", 6], ["technical help", 5], ["technician", 4], ["printer driver", 5],
+    ["driver", 3], ["network printing", 5], ["scan to email", 5], ["configuration", 3],
   ],
-  MOBILE_APP: [
-    ["mobile app", 5], ["android app", 5], ["ios app", 5], ["iphone app", 5], ["app development", 5],
-    ["app", 2], ["ایپ", 3],
-  ],
-  SOFTWARE: [
-    ["software", 4], ["web app", 4], ["web application", 5], ["portal", 3], ["dashboard", 2],
-    ["saas", 4], ["erp", 3], ["api integration", 4], ["سافٹ ویئر", 4],
+  OFFICE_SOLUTIONS: [
+    ["office solution", 6], ["office solutions", 6], ["print solution", 6], ["managed print", 6],
+    ["document solution", 6], ["office setup", 5], ["complete office", 4],
   ],
 };
 
-/** Request intents: what the customer wants to happen. */
+/** What the customer wants to happen. */
 const REQUEST_KEYWORDS: Partial<Record<BotIntent, Weighted>> = {
-  QUOTE: [
-    ["quote", 5], ["quotation", 5], ["estimate", 3], ["proposal", 3], ["کوٹیشن", 5],
+  PRODUCTS: [
+    ["your products", 5], ["product list", 5], ["show products", 5], ["catalogue", 5], ["catalog", 5],
+    ["what do you sell", 6], ["what products", 5], ["which products", 5], ["products", 3], ["range", 2],
   ],
-  DEMO: [["demo", 5], ["demonstration", 5], ["free trial", 4], ["trial", 2], ["ڈیمو", 5]],
+  QUOTE: [
+    ["quotation", 5], ["quote", 5], ["estimate", 3], ["proposal", 3], ["rfq", 5], ["کوٹیشن", 5],
+  ],
   PRICING: [
-    ["price", 4], ["pricing", 4], ["cost", 4], ["costs", 4], ["how much", 4], ["rate", 2], ["rates", 3],
-    ["charges", 4], ["fee", 3], ["fees", 3], ["package", 2], ["packages", 3], ["kitne ka", 5],
-    ["kitna", 3], ["kitne", 3], ["qeemat", 5], ["qeemat kya", 5], ["charges kya", 5], ["قیمت", 5],
-    ["کتنے کا", 5], ["خرچہ", 4],
+    ["price", 4], ["prices", 4], ["pricing", 4], ["price list", 5], ["cost", 4], ["how much", 4], ["rate", 2],
+    ["rates", 3], ["kitne ka", 5], ["kitne ki", 5], ["kitna", 3], ["kitne", 3], ["qeemat", 5], ["قیمت", 5],
+    ["کتنے کا", 5], ["ریٹ", 3],
+  ],
+  DEMO: [["demo", 5], ["demonstration", 5], ["see the machine", 5], ["trial", 2], ["ڈیمو", 5]],
+  CALLBACK: [
+    ["call me back", 6], ["call back", 5], ["callback", 5], ["call me", 5], ["give me a call", 6],
+    ["mujhe call", 5], ["call karein", 5], ["call kar", 4], ["phone karein", 5], ["فون کریں", 5], ["کال کریں", 5],
+  ],
+  SERVICE_REQUEST: [
+    ["not working", 5], ["stopped working", 5], ["isnt working", 5], ["out of order", 5], ["breakdown", 5],
+    ["broken", 4], ["paper jam", 6], ["jammed", 5], ["jamming", 5], ["jam", 3], ["error code", 5], ["error", 3],
+    ["not printing", 5], ["wont print", 5], ["not copying", 5], ["not scanning", 5], ["wont turn on", 5],
+    ["not turning on", 5], ["print nahi", 4], ["copy nahi", 4],
+    ["kharab", 5], ["kharaab", 5], ["band ho gaya", 4], ["band ho gayi", 4], ["chal nahi raha", 5],
+    ["kaam nahi kar", 5], ["nahi chal", 4], ["send a technician", 6], ["technician bhej", 6], ["need repair", 5],
+    ["needs repair", 5], ["repair karwana", 5], ["repair chahiye", 5], ["خراب", 5], ["کام نہیں کر", 5],
+  ],
+  TRACK_REQUEST: [
+    ["track my", 6], ["track", 4], ["tracking", 5], ["status of my", 6], ["ticket status", 6], ["request status", 6],
+    ["complaint status", 6], ["order status", 5], ["reference number", 4], ["ticket number", 4], ["update on my", 5],
+    ["kahan tak", 4], ["kya hua", 3],
   ],
   SUPPORT: [
-    ["not working", 4], ["stopped working", 4], ["existing client", 4], ["support ticket", 5],
-    ["kaam nahi kar", 4], ["band ho gaya", 3], ["error", 3], ["bug", 3], ["crashed", 3], ["is down", 3],
-    ["technical issue", 4], ["help with my project", 4], ["my project", 2], ["support", 2],
-    ["issue", 1], ["problem", 1], ["masla", 1], ["خراب", 3], ["مسئلہ", 1],
+    ["customer support", 5], ["customer care", 5], ["help desk", 4], ["support", 2], ["issue", 1], ["problem", 1],
+    ["masla", 2], ["مسئلہ", 2],
   ],
   BILLING: [
-    ["invoice", 5], ["billing", 5], ["payment", 3], ["refund", 5], ["charged", 4], ["receipt", 3],
-    ["bill", 3], ["بل", 3], ["ادائیگی", 4],
+    ["invoice", 5], ["billing", 5], ["payment", 3], ["receipt", 3], ["bill", 3], ["refund", 5], ["بل", 3], ["ادائیگی", 4],
   ],
   PARTNERSHIP: [
-    ["partnership", 5], ["partner with", 5], ["reseller", 5], ["white label", 5], ["white-label", 5],
-    ["affiliate", 4], ["collaborate", 3], ["collaboration", 3],
+    ["dealership", 5], ["dealer", 5], ["distributor", 5], ["distributorship", 5], ["reseller", 5], ["franchise", 4],
+    ["partner with", 5], ["partnership", 5],
   ],
   CAREER: [
     ["job", 3], ["jobs", 3], ["career", 4], ["careers", 4], ["hiring", 3], ["vacancy", 5], ["internship", 5],
@@ -122,27 +127,40 @@ const REQUEST_KEYWORDS: Partial<Record<BotIntent, Weighted>> = {
 };
 
 /** Minimum weight for a request intent to steer the conversation. */
-const REQUEST_THRESHOLD: Partial<Record<BotIntent, number>> = { SUPPORT: 4, CAREER: 4, PARTNERSHIP: 4 };
+const REQUEST_THRESHOLD: Partial<Record<BotIntent, number>> = {
+  SERVICE_REQUEST: 4,
+  SUPPORT: 4,
+  CAREER: 4,
+  PARTNERSHIP: 4,
+  TRACK_REQUEST: 4,
+  PRODUCTS: 4,
+};
 
 export interface Classification {
   /** The single best label for the message — what gets stored as the intent. */
   primary: BotIntent;
-  /** The service mentioned, if any. */
+  /** The product or service line mentioned, if any. */
   service?: BotIntent;
   /** The request expressed, if any. */
   request?: BotIntent;
 }
 
+/** A phrase or its plural: "photocopier" also matches "photocopiers", "cartridge" "cartridges". */
+function mentions(text: string, phrase: string): boolean {
+  return hasPhrase(text, phrase) || hasPhrase(text, `${phrase}s`) || hasPhrase(text, `${phrase}es`);
+}
+
 function score(text: string, table: Partial<Record<BotIntent, Weighted>>, extra: BotConfig["intents"]) {
   const scores = new Map<BotIntent, number>();
+  const serviceTable = table === SERVICE_KEYWORDS;
   for (const intent of BOT_INTENTS) {
     let total = 0;
     for (const [phrase, weight] of table[intent] ?? []) {
-      if (hasPhrase(text, phrase)) total += weight;
+      if (mentions(text, phrase)) total += weight;
     }
-    if (table === SERVICE_KEYWORDS ? SERVICE_INTENTS.includes(intent) : !SERVICE_INTENTS.includes(intent)) {
+    if (serviceTable === SERVICE_INTENTS.includes(intent)) {
       for (const phrase of extra[intent]?.keywords ?? []) {
-        if (hasPhrase(text, phrase)) total += 5;
+        if (mentions(text, phrase)) total += 5;
       }
     }
     if (total > 0) scores.set(intent, total);
@@ -158,15 +176,24 @@ function best(scores: Map<BotIntent, number>): BotIntent | undefined {
   return top?.[0];
 }
 
+/** A reference number such as PL-TKT-7F3K2Q9A. */
+const REFERENCE = /\b[A-Z]{2}-(?:LEAD|TKT|QTE|MTG)-[A-Z2-9]{6,10}\b/i;
+
+/** Requests that change what happens next, taking priority over the topic. */
+const STEERING_REQUESTS: readonly BotIntent[] = [
+  "SERVICE_REQUEST", "TRACK_REQUEST", "BILLING", "CAREER", "PARTNERSHIP", "QUOTE", "CALLBACK", "DEMO",
+];
+
 export function classify(message: string, config: Pick<BotConfig, "intents">): Classification {
   const text = normalise(message);
   const services = score(text, SERVICE_KEYWORDS, config.intents);
   const requests = score(text, REQUEST_KEYWORDS, config.intents);
 
-  // "WhatsApp" alongside a chatbot word is a WhatsApp chatbot, not a generic one.
-  if (services.has("WHATSAPP_CHATBOT") && services.has("AI_CUSTOMER_SUPPORT")) {
-    services.set("WHATSAPP_CHATBOT", (services.get("WHATSAPP_CHATBOT") ?? 0) + (services.get("AI_CUSTOMER_SUPPORT") ?? 0));
-    services.delete("AI_CUSTOMER_SUPPORT");
+  if (REFERENCE.test(message)) requests.set("TRACK_REQUEST", Math.max(requests.get("TRACK_REQUEST") ?? 0, 8));
+
+  // "Photocopy" on its own is a photocopier; "photocopy paper" is supplies.
+  if (services.has("OFFICE_SUPPLIES") && services.has("PHOTOCOPIER") && hasPhrase(text, "paper")) {
+    services.delete("PHOTOCOPIER");
   }
 
   for (const [intent, value] of requests) {
@@ -176,26 +203,24 @@ export function classify(message: string, config: Pick<BotConfig, "intents">): C
   const service = best(services);
   const request = best(requests);
 
-  // A request that changes what happens next wins; asking about a price or a
-  // demo *of something* keeps the something as the label.
-  const primary =
-    request && ["SUPPORT", "BILLING", "CAREER", "PARTNERSHIP", "QUOTE"].includes(request)
-      ? request
-      : service ?? request ?? "GENERAL_INQUIRY";
+  // A request that changes what happens next wins; asking about the price of
+  // something keeps the something as the label.
+  const primary = request && STEERING_REQUESTS.includes(request) ? request : service ?? request ?? "GENERAL_INQUIRY";
 
   return { primary, service, request };
 }
 
 // ------------------------------------------------------------ Conversation --
 
-// Phrases, not single words: "I am the marketing manager" must not open a ticket.
+// Phrases, not single words: "I am the office manager" must not open a ticket.
+// "Call me back" is deliberately absent — it is a callback request, not a handover.
 const HUMAN_PHRASES = [
   "talk to a human", "speak to a human", "talk to human", "talk to someone", "speak to someone",
   "real person", "human agent", "live agent", "talk to a representative", "speak to a representative",
   "talk to a person", "speak to a person", "talk to your team", "speak to your team", "connect me with someone",
-  "talk to your manager", "speak to your manager", "talk to the manager", "call me back",
+  "talk to your manager", "speak to your manager", "talk to the manager", "talk to an agent",
   "insan se baat", "insaan se baat", "bande se baat", "baat karwao", "baat karwaen", "kisi se baat",
-  "team se baat", "expert se baat", "manager se baat",
+  "team se baat", "manager se baat", "agent se baat",
   "انسان سے بات", "نمائندے سے بات", "کسی سے بات",
 ];
 
@@ -227,12 +252,12 @@ const OPT_IN_PHRASES = ["start", "subscribe", "unstop", "resume messages"];
 
 /**
  * An opt-out request. Only short messages count: "stop" on its own is a clear
- * instruction, while "don't stop the campaign" in a long message is not.
+ * instruction, while "my printer won't stop jamming" is not.
  */
 export function isOptOut(message: string): boolean {
   if (wordCount(message) > 6) return false;
   const text = normalise(message);
-  return OPT_OUT_PHRASES.some((phrase) => hasPhrase(text, phrase)) && !hasPhrase(text, "dont stop");
+  return OPT_OUT_PHRASES.some((phrase) => hasPhrase(text, phrase)) && !hasPhrase(text, "dont stop") && !hasPhrase(text, "wont stop");
 }
 
 export function isOptIn(message: string): boolean {
@@ -261,7 +286,7 @@ export function isGreetingOnly(message: string): boolean {
   for (const greeting of [...GREETINGS].sort((a, b) => b.length - a.length)) {
     text = text.replace(normalise(greeting), " ");
   }
-  return text.replace(/\b(there|team|bitsol|sir|madam|ji|jee)\b/g, "").trim() === "";
+  return text.replace(/\b(there|team|pros|link|proslink|sir|madam|ji|jee)\b/g, "").replace(/-/g, "").trim() === "";
 }
 
 const QUESTION_STARTS = [
@@ -270,7 +295,7 @@ const QUESTION_STARTS = [
   "کیا", "کیسے", "کتنا", "کتنے", "کب", "کہاں", "کون",
 ];
 
-/** A question rather than an answer — "Do you work with clinics?" */
+/** A question rather than an answer — "Do you install in Multan?" */
 export function isQuestion(message: string): boolean {
   const trimmed = message.trim();
   if (/[?؟]\s*$/.test(trimmed)) return true;
@@ -281,21 +306,18 @@ export function isQuestion(message: string): boolean {
 // ---------------------------------------------------------------- Industry --
 
 const INDUSTRIES: Array<[label: string, phrases: string[]]> = [
-  ["Real estate", ["real estate", "realtor", "realtors", "property", "properties", "housing society", "builders", "developers", "plots", "رئیل اسٹیٹ", "پراپرٹی"]],
-  ["Healthcare", ["clinic", "clinics", "hospital", "doctor", "dental", "dentist", "healthcare", "medical", "pharmacy", "physiotherapy", "کلینک", "ہسپتال"]],
-  ["E-commerce", ["ecommerce", "e-commerce", "online store", "shopify store", "online shop"]],
-  ["Retail", ["retail", "shop", "boutique", "showroom", "store"]],
-  ["Restaurants & food", ["restaurant", "cafe", "bakery", "food", "catering", "cloud kitchen", "ریسٹورنٹ"]],
-  ["Hospitality & travel", ["hotel", "travel", "tour", "tourism", "travel agency", "umrah", "hajj", "resort"]],
-  ["Automotive", ["car", "cars", "automotive", "showroom cars", "dealership", "rent a car", "auto parts"]],
-  ["Beauty & wellness", ["salon", "spa", "beauty", "cosmetics", "skincare", "gym", "fitness"]],
-  ["Construction", ["construction", "contractor", "interior design", "architecture", "renovation"]],
-  ["Manufacturing", ["manufacturing", "factory", "textile", "garments", "exporter", "export"]],
-  ["Logistics", ["logistics", "courier", "cargo", "transport", "freight", "shipping company"]],
-  ["Finance & insurance", ["finance", "insurance", "bank", "fintech", "accounting firm", "loan"]],
-  ["Legal", ["law firm", "lawyer", "legal services", "advocate"]],
-  ["Technology & SaaS", ["saas", "software company", "tech startup", "it company", "startup"]],
-  ["Agency & services", ["agency", "consultancy", "consulting firm", "recruitment"]],
+  ["Education", ["school", "schools", "college", "university", "academy", "institute", "madrassa", "coaching", "campus", "اسکول", "کالج"]],
+  ["Government", ["government", "ministry", "govt", "sarkari", "department", "municipal", "سرکاری"]],
+  ["Banking & finance", ["bank", "banking", "branch banking", "microfinance", "insurance", "leasing"]],
+  ["Healthcare", ["hospital", "clinic", "medical", "pharmacy", "laboratory", "lab", "ہسپتال"]],
+  ["Printing & publishing", ["printing press", "press", "publisher", "publishing", "print shop", "photocopy shop", "photostat shop"]],
+  ["Legal", ["law firm", "lawyer", "advocate", "chambers", "court"]],
+  ["NGO & development", ["ngo", "non profit", "nonprofit", "foundation", "trust"]],
+  ["Manufacturing", ["factory", "manufacturing", "textile", "mill", "industry", "industrial"]],
+  ["Retail", ["shop", "store", "retail", "showroom", "mart"]],
+  ["Hospitality", ["hotel", "restaurant", "guest house", "resort"]],
+  ["Logistics", ["logistics", "courier", "cargo", "transport"]],
+  ["Corporate office", ["corporate office", "head office", "company office", "software house", "call center", "call centre"]],
 ];
 
 /** A best-effort industry label from what the customer wrote. */
@@ -304,7 +326,7 @@ export function detectIndustry(message: string): string | undefined {
   return INDUSTRIES.find(([, phrases]) => phrases.some((phrase) => hasPhrase(text, phrase)))?.[0];
 }
 
-// -------------------------------------------------------------- Enterprise --
+// -------------------------------------------------------------- Corporate --
 
 export interface EnterpriseSignal {
   enterprise: boolean;
@@ -317,8 +339,9 @@ function parseCount(raw: string, suffix?: string): number {
 }
 
 /**
- * Whether the customer is describing an enterprise: a headcount or branch
- * count over the configured thresholds, or one of the enterprise phrases.
+ * Whether the customer is describing a corporate or bulk requirement: a
+ * headcount or branch count over the configured thresholds, or one of the
+ * configured phrases (a tender, several branches, a fleet of machines).
  */
 export function detectEnterprise(
   message: string,
@@ -334,7 +357,7 @@ export function detectEnterprise(
     return { enterprise: true, reason: `${people[0].trim()}` };
   }
 
-  const branches = source.match(/(\d+)\s*\+?\s*(?:branches|branch|locations|offices|outlets|stores|campuses|برانچز)/i);
+  const branches = source.match(/(\d+)\s*\+?\s*(?:branches|branch|locations|offices|campuses|schools|برانچز)/i);
   if (branches && Number(branches[1]) >= config.branchThreshold) {
     return { enterprise: true, reason: `${branches[0].trim()}` };
   }

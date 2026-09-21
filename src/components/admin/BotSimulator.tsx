@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn, humanise, isUrduScript } from "@/lib/utils";
 import type { Outgoing } from "@/lib/bot/render";
+import { BRAND } from "@/config/brand";
 
 /**
  * A WhatsApp conversation with the real assistant, inside the console.
@@ -101,7 +102,7 @@ export function BotSimulator() {
       <Card className="flex h-[78dvh] flex-col overflow-hidden p-0">
         <div className="flex flex-wrap items-center gap-2 border-b bg-[#075E54] px-4 py-3 text-white">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">BITSOL Marketing</p>
+            <p className="text-sm font-semibold">{BRAND.assistant.name}</p>
             <p className="text-[11px] text-white/70">Simulator · nothing is sent or saved</p>
           </div>
           <Input

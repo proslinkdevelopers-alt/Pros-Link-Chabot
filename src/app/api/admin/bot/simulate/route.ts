@@ -9,15 +9,19 @@ import { runTurn, type BotRuntime, type Effect, type EffectResult } from "@/lib/
 import { stripRefCode } from "@/lib/bot/source";
 import { transcriptOf, type Outgoing } from "@/lib/bot/render";
 import { readBotState } from "@/lib/bot/types";
+import { contactOf, getCompanyProfile } from "@/lib/company";
+import { findProduct, listCategories, listProducts } from "@/lib/catalog";
+import { createCrmRuntime } from "@/lib/bot/crm-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * Chatbot Studio simulator — one turn of the real engine with the live
- * configuration and the real model, but nothing sent to WhatsApp and nothing
- * written to the CRM. The CRM effects the turn *would* have had are returned
- * so the tester can see exactly what the team would receive.
+ * configuration, catalogue and model, as WhatsApp or the web assistant, but
+ * nothing sent and nothing written to the CRM. The CRM effects the turn
+ * *would* have had are returned so the tester can see what the team would
+ * receive.
  *
  * Stateless: the browser holds the conversation and sends it back each turn.
  */
@@ -28,13 +32,16 @@ const bodySchema = z.object({
     text: z.string().max(4000),
     replyId: z.string().max(256).optional(),
   }),
+  channel: z.enum(["WHATSAPP", "WEB"]).default("WHATSAPP"),
   phone: z.string().max(20).default("+923001234567"),
   profileName: z.string().max(80).optional(),
   language: z.string().optional(),
   history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(8000) })).max(80),
   details: z.record(z.unknown()).default({}),
   state: z.unknown().optional(),
-  records: z.object({ lead: z.string().optional(), meeting: z.string().optional(), ticket: z.string().optional() }).default({}),
+  records: z
+    .object({ lead: z.string().optional(), meeting: z.string().optional(), ticket: z.string().optional(), quote: z.string().optional() })
+    .default({}),
   optedOut: z.boolean().default(false),
   turns: z.number().int().min(0).default(0),
 });
@@ -47,14 +54,17 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return Response.json({ error: "Invalid simulator request." }, { status: 400 });
   const body = parsed.data;
 
-  const config = await getBotConfig();
+  const [config, profile, categoryRows] = await Promise.all([getBotConfig(), getCompanyProfile(), listCategories()]);
+  const company = contactOf(profile);
+  const categories = categoryRows.map(({ slug, name }) => ({ slug, name }));
+  const phone = body.channel === "WHATSAPP" ? body.phone : "";
   const text = body.input.kind === "text" ? stripRefCode(body.input.text) : body.input.text;
   const previous: Language = asLanguage(body.language) ?? "en";
   const language: Language =
     body.input.kind === "text" && text.trim().split(/\s+/).length > 2 ? detectLanguage(text) : previous;
 
   const history = [...body.history, { role: "user" as const, content: text || "[tap]" }];
-  const ai = { config, language, phone: body.phone, profileName: body.profileName, history };
+  const ai = { config, company, categories, channel: body.channel, language, phone, profileName: body.profileName, history };
   const sent: Outgoing[] = [];
   const effects: Array<{ type: Effect["type"]; summary: string; detail?: unknown }> = [];
   let optedOut = body.optedOut;
@@ -66,7 +76,7 @@ export async function POST(req: NextRequest) {
         effects.push({ type: "event", summary: `${effect.event}${effect.value ? ` · ${effect.value}` : ""}` });
         return {};
       case "sync": {
-        const due = effect.force || Boolean(effect.details.name && (effect.details.service || effect.details.requirements));
+        const due = effect.force || Boolean(effect.details.name && (effect.details.productCategory || effect.details.interest || effect.details.requirements));
         if (!due && !body.records.lead) return {};
         const created = !body.records.lead && !leadCreated;
         leadCreated = true;
@@ -78,8 +88,11 @@ export async function POST(req: NextRequest) {
         return { leadReference: body.records.lead ?? "SIM-LEAD", leadCreated: created };
       }
       case "quote":
-        effects.push({ type: "quote", summary: `Draft quotation · ${effect.title}` });
+        effects.push({ type: "quote", summary: `Quote request · ${effect.title}` });
         return { reference: "SIM-QTE" };
+      case "attach":
+        effects.push({ type: "attach", summary: `Attachment added to ${effect.ticketReference}` });
+        return {};
       case "ticket":
         effects.push({
           type: "ticket",
@@ -116,6 +129,19 @@ export async function POST(req: NextRequest) {
     }
   };
 
+  const tracker = createCrmRuntime({
+    channel: body.channel,
+    conversationId: "simulator",
+    phone,
+    language,
+    config,
+    company,
+    categories,
+    history: [],
+    now: new Date(),
+    deliver: async () => ({ ok: true }),
+  });
+
   const simulator: BotRuntime = {
     send: async (message) => {
       sent.push(message);
@@ -125,6 +151,10 @@ export async function POST(req: NextRequest) {
     extract: (known) => customerDetailsFrom(ai, known),
     translate: (copy, target) => translateCopy(ai, copy, target),
     summarize: () => handoverBriefing(ai),
+    products: (slug) => listProducts(slug),
+    product: (id) => findProduct(id),
+    // Tracking only reads; it looks up the real record with the simulated number.
+    track: (reference, number) => tracker.track(reference, number),
     commit,
   };
 
@@ -133,8 +163,11 @@ export async function POST(req: NextRequest) {
       { kind: body.input.kind, text, replyId: body.input.replyId },
       {
         config,
+        channel: body.channel,
+        company,
+        categories,
         language,
-        phone: body.phone,
+        phone,
         profileName: body.profileName,
         isNewConversation: body.turns === 0,
         optedOut: body.optedOut,

@@ -4,10 +4,12 @@ import type { BotConfig } from "./schema";
  * Business hours in the configured time zone.
  *
  * Used to set expectations honestly on a handover ("our team is back Monday
- * at 10:00") and to keep follow-ups from arriving at 3 a.m.
+ * at 09:00") and to keep follow-ups from arriving at 3 a.m. Until someone
+ * enters real hours in Chatbot Studio the configuration is null, and the
+ * assistant never claims the team is closed.
  */
 
-type Hours = BotConfig["businessHours"];
+type Hours = NonNullable<BotConfig["businessHours"]>;
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -30,13 +32,15 @@ function toMinutes(hhmm: string): number {
   return hours * 60 + minutes;
 }
 
-export function isOpen(hours: Hours, now = new Date()): boolean {
+export function isOpen(hours: Hours | null, now = new Date()): boolean {
+  if (!hours) return true;
   const { day, minutes } = localClock(now, hours.timezone);
   return hours.days.includes(day) && minutes >= toMinutes(hours.open) && minutes < toMinutes(hours.close);
 }
 
 /** "today at 10:00", "tomorrow at 10:00" or "Monday at 10:00" (business time zone). */
-export function nextOpening(hours: Hours, now = new Date()): string {
+export function nextOpening(hours: Hours | null, now = new Date()): string {
+  if (!hours) return "soon";
   const { day, minutes } = localClock(now, hours.timezone);
   for (let offset = 0; offset < 8; offset += 1) {
     const candidate = (day + offset) % 7;

@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { DEPARTMENT } from "@/config/brand";
 import { generateReference, truncate } from "@/lib/utils";
-import { logEvent, notifyTeam } from "@/lib/notify";
-import { findService } from "@/data/marketing/services";
+import { logEvent, notifyStaff, notifyTeam } from "@/lib/notify";
+import { linkCustomer } from "@/lib/customers";
 import {
   MEETING_MODE_LABEL,
   asCustomerDetails,
@@ -19,18 +19,21 @@ import type { CapturedRecord } from "@/types";
  *  Conversation capture → CRM
  * =============================================================================
  *
- *  The representative gathers details in conversation; `customer.ts` reads them
- *  back out after every turn. This module keeps them on the conversation
- *  (`conversations.capture`) and turns them into the records the team works
- *  from, the moment there is enough to act on:
+ *  The assistant gathers details in conversation and in short flows; this
+ *  module keeps them on the conversation (`conversations.capture`) and turns
+ *  them into the records the team works from:
  *
- *    • a **lead** once there is a name, a way to reach them and a need,
- *    • a **meeting request** once a consultation has a day and a time,
- *    • a **support ticket** once an existing client has described a problem.
+ *    • a **lead** once there is a name, a way to reach them and a need — or
+ *      as soon as a flow that promises follow-up finishes,
+ *    • an **appointment** once a demonstration or visit has a day and a time.
  *
- *  Each is created once per conversation and then kept current as the customer
- *  adds or corrects details. Only fields the customer changed are written back,
- *  so a correction the team made in the console survives the next message.
+ *  Quote requests and service tickets are created by the runtime when their
+ *  flows finish. Every record is linked to one customer profile.
+ *
+ *  Each record is created once per conversation and then kept current as the
+ *  customer adds or corrects details. Only fields the customer changed are
+ *  written back, so a correction the team made in the console survives the
+ *  next message.
  * =============================================================================
  */
 
@@ -42,24 +45,23 @@ export interface CaptureState {
   meetingReference?: string;
   ticketId?: string;
   ticketReference?: string;
+  quoteId?: string;
+  quoteReference?: string;
+  customerId?: string;
   updatedAt?: string;
-  /** The WhatsApp assistant's own memory — `BotState` in `lib/bot/types.ts`. */
+  /** The engine's own memory — `BotState` in `lib/bot/types.ts`. */
   bot?: unknown;
 }
 
 export type CaptureRecordKind = CapturedRecord["kind"];
 
-/** Narrow what a sync may create — the WhatsApp assistant creates meetings and tickets itself. */
 export interface SyncOptions {
-  only?: CaptureRecordKind[];
+  only?: Array<"LEAD" | "MEETING">;
   /** Create the lead now, even without the conversational signals (a flow finished). */
   forceLead?: boolean;
-  ticket?: {
-    subject?: string;
-    description?: string;
-    priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
-  };
-  /** Added to a meeting the assistant creates, e.g. what the customer said about the time. */
+  /** Move the lead to this stage if it is earlier in the pipeline. */
+  stage?: "QUOTE_REQUESTED";
+  /** Added to an appointment, e.g. what the customer said about the time. */
   meetingNotes?: string;
 }
 
@@ -68,7 +70,7 @@ export interface CaptureContext {
   source: "CHATBOT" | "WHATSAPP";
   /** What the channel knows without asking — a WhatsApp number and profile name. */
   fallback?: { name?: string; phone?: string };
-  /** Who hears about records this sync creates. Omitted, the sales inbox. */
+  /** Team inboxes for email notifications. Omitted, the sales inbox. */
   notifyTo?: string[];
 }
 
@@ -78,32 +80,10 @@ export interface CaptureResult {
   created: CapturedRecord[];
 }
 
-/**
- * Narrow the untyped `conversations.capture` JSON column.
- *
- * WhatsApp captures written by the old one-question-per-message flow
- * (`{ flow, step, answers }`) are read as details, so a customer who was half
- * way through it is not asked the same things again.
- */
+/** Narrow the untyped `conversations.capture` JSON column. */
 export function readCapture(value: unknown): CaptureState {
   if (!value || typeof value !== "object") return { details: {} };
   const stored = value as Record<string, unknown>;
-
-  if (stored.flow === "LEAD" && stored.answers && typeof stored.answers === "object") {
-    const answers = stored.answers as Record<string, unknown>;
-    return {
-      details: asCustomerDetails({
-        name: answers.name,
-        company: answers.company,
-        phone: answers.phone,
-        service: typeof answers.service === "string" && findService(answers.service) ? answers.service : undefined,
-        budget: answers.budget,
-        timeline: answers.timeline,
-        requirements: answers.requirements,
-      }),
-    };
-  }
-  // Anything else without details (an Institute admission capture) starts fresh.
   if (!stored.details) return { details: {} };
 
   const text = (key: string) => (typeof stored[key] === "string" ? (stored[key] as string) : undefined);
@@ -115,6 +95,9 @@ export function readCapture(value: unknown): CaptureState {
     meetingReference: text("meetingReference"),
     ticketId: text("ticketId"),
     ticketReference: text("ticketReference"),
+    quoteId: text("quoteId"),
+    quoteReference: text("quoteReference"),
+    customerId: text("customerId"),
     updatedAt: text("updatedAt"),
     bot: stored.bot,
   };
@@ -126,8 +109,11 @@ export function recordsOf(state: CaptureState): CustomerContext["records"] {
     lead: state.leadReference,
     meeting: state.meetingReference,
     ticket: state.ticketReference,
+    quote: state.quoteReference,
   };
 }
+
+const EARLY_STAGES = ["NEW", "CONTACTED", "QUALIFIED"] as const;
 
 /**
  * Merge newly extracted details into the conversation and create or update the
@@ -139,7 +125,7 @@ export async function syncCapture(
   incoming: CustomerDetails,
   options: SyncOptions = {}
 ): Promise<CaptureResult | null> {
-  const wants = (kind: CaptureRecordKind) => !options.only || options.only.includes(kind);
+  const wants = (kind: "LEAD" | "MEETING") => !options.only || options.only.includes(kind);
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Serialise syncs for one conversation. Two WhatsApp messages sent a
@@ -149,9 +135,9 @@ export async function syncCapture(
 
       const row = await tx.conversation.findUnique({
         where: { id: context.conversationId },
-        select: { capture: true },
+        select: { capture: true, department: true },
       });
-      if (!row) return null;
+      if (!row || row.department !== DEPARTMENT) return null;
 
       const current = readCapture(row.capture);
       const previous = current.details;
@@ -161,31 +147,51 @@ export async function syncCapture(
 
       const name = details.name ?? context.fallback?.name;
       const phone = details.phone ?? context.fallback?.phone;
-      const reachable = Boolean(phone || details.email);
+      const reachable = Boolean(phone || details.email || details.whatsapp);
+
+      const customerId = async () => {
+        if (next.customerId) return next.customerId;
+        const id = await linkCustomer(tx, {
+          name,
+          phone,
+          whatsapp: details.whatsapp ?? (context.source === "WHATSAPP" ? phone : undefined),
+          email: details.email,
+          company: details.company,
+          city: details.city,
+          address: details.address,
+          businessType: details.businessType,
+          source: context.source,
+        });
+        if (id) {
+          next.customerId = id;
+          await tx.conversation.update({ where: { id: context.conversationId }, data: { customerId: id } });
+        }
+        return id ?? undefined;
+      };
 
       // --- Lead ---------------------------------------------------------------
-      if (wants("LEAD") && (details.intent !== "SUPPORT" || options.forceLead)) {
-        const hasNeed = Boolean(details.service || details.requirements || details.intent === "CONSULTATION");
-        // Asking what a website costs does not make someone a lead, even on
-        // WhatsApp where their number is already known. Asking for the work
-        // does, and so does giving us a way to reach them.
+      if (wants("LEAD") && (details.intent !== "SERVICE" || options.forceLead)) {
+        const hasNeed = Boolean(details.productCategory || details.productId || details.interest || details.requirements);
+        // Asking what a copier costs does not make someone a lead, even on
+        // WhatsApp where their number is already known. Asking for a quotation
+        // or a visit does, and so does giving a way to reach them.
         const interested =
-          details.intent === "PROJECT" ||
-          details.intent === "CONSULTATION" ||
-          Boolean(details.phone || details.email);
+          details.intent === "PURCHASE" || details.intent === "APPOINTMENT" || Boolean(details.phone || details.email);
 
         if (!next.leadId && ((name && reachable && hasNeed && interested) || options.forceLead)) {
           const reference = generateReference("LEAD");
+          const columns = await leadColumns(tx, details);
           const lead = await tx.lead.create({
             data: {
               reference,
               department: DEPARTMENT,
-              name: name ?? "WhatsApp contact",
+              name: name ?? (context.source === "WHATSAPP" ? "WhatsApp contact" : "Website visitor"),
               phone: phone ?? "",
-              ...leadColumns(details),
+              ...columns,
               source: context.source,
-              stage: "NEW",
+              stage: options.stage ?? "NEW",
               conversationId: context.conversationId,
+              customerId: (await customerId()) ?? null,
             },
             select: { id: true },
           });
@@ -193,22 +199,33 @@ export async function syncCapture(
           next.leadReference = reference;
           created.push({ kind: "LEAD", id: lead.id, reference });
         } else if (next.leadId) {
-          const changes = changedLeadColumns(previous, details);
-          if (changes) {
-            await tx.lead.updateMany({ where: { id: next.leadId }, data: changes });
+          const changes: Prisma.LeadUncheckedUpdateManyInput = (await changedLeadColumns(tx, previous, details)) ?? {};
+          if (!(await tx.lead.findFirst({ where: { id: next.leadId }, select: { customerId: true } }))?.customerId) {
+            const id = await customerId();
+            if (id) changes.customerId = id;
+          }
+          if (Object.keys(changes).length) {
+            await tx.lead.updateMany({ where: { id: next.leadId, department: DEPARTMENT }, data: changes });
+          }
+          if (options.stage) {
+            await tx.lead.updateMany({
+              where: { id: next.leadId, department: DEPARTMENT, stage: { in: [...EARLY_STAGES] } },
+              data: { stage: options.stage },
+            });
           }
         }
       }
 
-      // --- Meeting request ----------------------------------------------------
+      // --- Appointment --------------------------------------------------------
       if (wants("MEETING") && details.meetingDate && details.meetingTime && name && reachable) {
         const slot = {
           preferredDate: new Date(`${details.meetingDate}T00:00:00Z`),
           preferredTime: details.meetingTime,
-          mode: details.meetingMode ?? ("ZOOM" as const),
+          mode: details.meetingMode ?? ("PHONE_CALL" as const),
           notes:
             [
-              details.meetingMode ? null : "Meeting type not stated — confirm it with the customer.",
+              details.meetingMode ? null : "Appointment type not stated — confirm it with the customer.",
+              details.address ? `Address: ${details.address}` : null,
               options.meetingNotes ?? null,
             ]
               .filter(Boolean)
@@ -225,7 +242,7 @@ export async function syncCapture(
               phone: phone ?? "",
               email: details.email ?? null,
               businessName: details.company ?? null,
-              topic: meetingTopic(details),
+              topic: appointmentTopic(details),
               status: "REQUESTED",
               leadId: next.leadId ?? null,
               conversationId: context.conversationId,
@@ -241,64 +258,11 @@ export async function syncCapture(
             previous.meetingDate !== details.meetingDate ||
             previous.meetingTime !== details.meetingTime ||
             previous.meetingMode !== details.meetingMode;
-          const contactChanged =
-            previous.name !== details.name ||
-            previous.phone !== details.phone ||
-            previous.email !== details.email;
-
-          if (slotChanged || contactChanged) {
-            // Only while the team hasn't confirmed it — a confirmed meeting is
-            // theirs. Notes are left alone: by now they may be the team's.
+          if (slotChanged) {
+            // Only while the team hasn't confirmed it — a confirmed appointment is theirs.
             const { notes: _notes, ...changedSlot } = slot;
-            await tx.meeting.updateMany({
-              where: { id: next.meetingId, status: "REQUESTED" },
-              data: {
-                ...(slotChanged ? changedSlot : {}),
-                ...(contactChanged ? { name, phone: phone ?? "", email: details.email ?? null } : {}),
-              },
-            });
+            await tx.meeting.updateMany({ where: { id: next.meetingId, status: "REQUESTED" }, data: changedSlot });
           }
-        }
-      }
-
-      // --- Support ticket -----------------------------------------------------
-      if (wants("TICKET") && details.intent === "SUPPORT" && details.requirements && reachable) {
-        const contact = {
-          contactName: name ?? null,
-          contactPhone: phone ?? null,
-          contactEmail: details.email ?? null,
-        };
-
-        if (!next.ticketId) {
-          const reference = generateReference("TKT");
-          const category = details.supportCategory ?? "GENERAL";
-          const ticket = await tx.ticket.create({
-            data: {
-              reference,
-              department: DEPARTMENT,
-              category,
-              status: "OPEN",
-              priority: options.ticket?.priority ?? (category === "COMPLAINT" ? "HIGH" : "NORMAL"),
-              subject: truncate(options.ticket?.subject ?? details.requirements, 120),
-              description: options.ticket?.description ?? details.requirements,
-              conversationId: context.conversationId,
-              ...contact,
-            },
-            select: { id: true },
-          });
-          next.ticketId = ticket.id;
-          next.ticketReference = reference;
-          created.push({ kind: "TICKET", id: ticket.id, reference });
-        } else if (
-          previous.requirements !== details.requirements ||
-          previous.phone !== details.phone ||
-          previous.email !== details.email ||
-          previous.name !== details.name
-        ) {
-          await tx.ticket.updateMany({
-            where: { id: next.ticketId, status: "OPEN" },
-            data: { description: details.requirements, ...contact },
-          });
         }
       }
 
@@ -339,8 +303,8 @@ type LeadColumns = Pick<
   Prisma.LeadUncheckedCreateInput,
   | "company"
   | "email"
+  | "whatsapp"
   | "businessType"
-  | "serviceSlug"
   | "budget"
   | "timeline"
   | "requirements"
@@ -348,39 +312,56 @@ type LeadColumns = Pick<
   | "country"
   | "city"
   | "subService"
+  | "productCategoryId"
+  | "productId"
+  | "quantity"
+  | "preferredContact"
   | "intent"
-  | "businessGoal"
-  | "challenge"
   | "companySize"
 >;
 
-function leadColumns(details: CustomerDetails): LeadColumns {
+/** Catalogue ids for the category slug and product id the customer chose, in this tenant. */
+async function catalogIds(tx: Prisma.TransactionClient, details: CustomerDetails) {
+  const [category, product] = await Promise.all([
+    details.productCategory
+      ? tx.productCategory.findFirst({ where: { department: DEPARTMENT, slug: details.productCategory }, select: { id: true } })
+      : null,
+    details.productId
+      ? tx.product.findFirst({ where: { department: DEPARTMENT, id: details.productId }, select: { id: true } })
+      : null,
+  ]);
+  return { productCategoryId: category?.id ?? null, productId: product?.id ?? null };
+}
+
+async function leadColumns(tx: Prisma.TransactionClient, details: CustomerDetails): Promise<LeadColumns> {
   return {
     company: details.company ?? null,
     email: details.email ?? null,
+    whatsapp: details.whatsapp ?? null,
     businessType: details.businessType ?? null,
-    serviceSlug: details.service ?? null,
     budget: details.budget ?? null,
     timeline: details.timeline ?? null,
     requirements: requirementsFor(details),
     website: details.website ?? null,
     country: details.country ?? null,
     city: details.city ?? null,
-    subService: details.subService ?? null,
+    subService: details.interest ?? null,
+    quantity: details.quantity ?? null,
+    preferredContact: details.preferredContact ?? null,
     intent: details.topic ?? null,
-    businessGoal: details.businessGoal ?? null,
-    challenge: details.challenge ?? null,
     companySize: details.companySize ?? null,
+    ...(await catalogIds(tx, details)),
   };
 }
 
 /** The columns whose customer-side value changed this turn, or null if none did. */
-function changedLeadColumns(
+async function changedLeadColumns(
+  tx: Prisma.TransactionClient,
   previous: CustomerDetails,
   next: CustomerDetails
-): Prisma.LeadUpdateManyMutationInput | null {
-  const before = leadColumns(previous);
-  const after = leadColumns(next);
+): Promise<Prisma.LeadUncheckedUpdateManyInput | null> {
+  const before = await leadColumns(tx, previous);
+  const after = await leadColumns(tx, next);
   const changes: Record<string, string | null> = {};
 
   for (const key of Object.keys(after) as Array<keyof LeadColumns>) {
@@ -394,153 +375,124 @@ function changedLeadColumns(
   return Object.keys(changes).length ? changes : null;
 }
 
-/** The lead's free-text column: what they want, plus the details that have no column. */
-function requirementsFor(details: CustomerDetails): string {
+/** The lead's free-text column: what they want, plus details that have no column of their own. */
+export function requirementsFor(details: CustomerDetails): string {
   const need =
     details.requirements ??
-    (details.intent === "CONSULTATION"
-      ? "Asked for a free consultation."
-      : "Shared their details with the assistant.");
+    (details.intent === "APPOINTMENT"
+      ? "Asked for a demonstration or visit."
+      : details.interest
+        ? `Interested in ${details.interest}.`
+        : "Shared their details with the assistant.");
 
   return [
     need,
-    details.customerType ? `Customers they want: ${details.customerType}` : null,
-    details.leadChannel ? `Current lead source: ${details.leadChannel}` : null,
-    details.monthlyLeads ? `Monthly leads needed: ${details.monthlyLeads}` : null,
-    details.currentMarketing ? `Current marketing: ${details.currentMarketing}` : null,
-    details.monthlyAdSpend ? `Monthly ad spend: ${details.monthlyAdSpend}` : null,
-    details.platform ? `Platform: ${details.platform}` : null,
-    details.features ? `Features: ${details.features}` : null,
     details.meetingDate
-      ? `Preferred consultation: ${details.meetingDate}${details.meetingTime ? ` at ${details.meetingTime}` : ""}${
+      ? `Preferred appointment: ${details.meetingDate}${details.meetingTime ? ` at ${details.meetingTime}` : ""}${
           details.meetingMode ? ` (${MEETING_MODE_LABEL[details.meetingMode]})` : ""
         }`
       : null,
+    details.address ? `Address: ${details.address}` : null,
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-function meetingTopic(details: CustomerDetails): string | null {
-  const service = details.service ? findService(details.service)?.name : undefined;
-  const topic = [service, details.requirements].filter(Boolean).join(" — ");
+function appointmentTopic(details: CustomerDetails): string | null {
+  const topic = [details.interest, details.requirements].filter(Boolean).join(" — ");
   return topic ? truncate(topic, 500) : null;
 }
 
 // ---------------------------------------------------------- Notifications ---
 
-async function announce(
-  record: CreatedRecord,
-  details: CustomerDetails,
-  context: CaptureContext
-): Promise<void> {
+async function announce(record: CreatedRecord, details: CustomerDetails, context: CaptureContext): Promise<void> {
   const name = details.name ?? context.fallback?.name ?? "Unknown";
   const phone = details.phone ?? context.fallback?.phone;
   const channel = context.source === "WHATSAPP" ? "WhatsApp" : "the website assistant";
-  const service = details.service ? findService(details.service)?.name : undefined;
 
   const contactLines = [
     `Name: ${name}`,
     phone ? `Phone: ${phone}` : null,
+    details.whatsapp && details.whatsapp !== phone ? `WhatsApp: ${details.whatsapp}` : null,
     details.email ? `Email: ${details.email}` : null,
-    details.company ? `Business: ${details.company}` : null,
-    details.businessType ? `Type of business: ${details.businessType}` : null,
+    details.company ? `Company: ${details.company}` : null,
     details.city ? `City: ${details.city}` : null,
   ];
 
   if (record.kind === "LEAD") {
+    const link = `/admin/crm/leads/${record.id}`;
+    const subject = `New lead ${record.reference} — ${name}${details.company ? ` (${details.company})` : ""}`;
     await notifyTeam({
       to: context.notifyTo,
-      subject: `New lead ${record.reference} — ${name}${details.company ? ` (${details.company})` : ""}`,
+      subject,
       body: [
         `Reference: ${record.reference}`,
-        `Captured in conversation on ${channel}.`,
+        `Captured on ${channel}.`,
         "",
         ...contactLines,
-        service ? `Service: ${service}` : null,
+        details.interest ? `Interested in: ${details.interest}` : null,
+        details.quantity ? `Quantity: ${details.quantity}` : null,
         details.budget ? `Budget: ${details.budget}` : null,
-        details.timeline ? `Timeline: ${details.timeline}` : null,
+        details.preferredContact ? `Preferred contact: ${details.preferredContact}` : null,
         "",
-        "What they need:",
+        "Requirement:",
         requirementsFor(details),
       ]
         .filter((line) => line !== null)
         .join("\n"),
-      link: `/admin/crm/leads/${record.id}`,
+      link,
     });
+    await notifyStaff({ permission: "leads.manage", subject, body: details.interest ?? requirementsFor(details), link });
     await logEvent({
       action: "lead.created",
       entity: "Lead",
       entityId: record.id,
-      message: `Lead ${record.reference} captured in conversation on ${channel}.`,
-      metadata: { reference: record.reference, service: details.service, source: context.source },
+      message: `Lead ${record.reference} captured on ${channel}.`,
+      metadata: { reference: record.reference, category: details.productCategory, source: context.source },
     });
     return;
   }
 
-  if (record.kind === "MEETING") {
-    await notifyTeam({
-      to: context.notifyTo,
-      subject: `Consultation request ${record.reference} — ${name} (${details.meetingDate} ${details.meetingTime})`,
-      body: [
-        `Reference: ${record.reference}`,
-        `Requested in conversation on ${channel}. Confirm the slot with the customer.`,
-        "",
-        ...contactLines,
-        `Preferred: ${details.meetingDate} at ${details.meetingTime}`,
-        `Type: ${details.meetingMode ? MEETING_MODE_LABEL[details.meetingMode] : "Not stated"}`,
-        details.requirements ? `\nTopic:\n${details.requirements}` : null,
-      ]
-        .filter((line) => line !== null)
-        .join("\n"),
-      link: `/admin/meetings`,
-    });
-    await logEvent({
-      action: "meeting.requested",
-      entity: "Meeting",
-      entityId: record.id,
-      message: `Consultation ${record.reference} requested in conversation on ${channel}.`,
-      metadata: { reference: record.reference, mode: details.meetingMode, source: context.source },
-    });
-    return;
-  }
-
+  const subject = `Appointment request ${record.reference} — ${name} (${details.meetingDate} ${details.meetingTime})`;
   await notifyTeam({
     to: context.notifyTo,
-    subject: `New ${(details.supportCategory ?? "GENERAL").toLowerCase()} ticket ${record.reference} — ${truncate(details.requirements ?? "", 60)}`,
+    subject,
     body: [
       `Reference: ${record.reference}`,
-      `Raised in conversation on ${channel}.`,
+      `Requested on ${channel}. Confirm the day and time with the customer.`,
       "",
       ...contactLines,
-      "",
-      details.requirements ?? "",
+      `Preferred: ${details.meetingDate} at ${details.meetingTime}`,
+      `Type: ${details.meetingMode ? MEETING_MODE_LABEL[details.meetingMode] : "Not stated"}`,
+      details.interest ? `About: ${details.interest}` : null,
     ]
       .filter((line) => line !== null)
       .join("\n"),
-    link: `/admin/support/tickets`,
+    link: "/admin/appointments",
   });
+  await notifyStaff({ permission: "appointments.manage", subject, link: "/admin/appointments" });
   await logEvent({
-    action: "ticket.created",
-    entity: "Ticket",
+    action: "appointment.requested",
+    entity: "Meeting",
     entityId: record.id,
-    message: `Ticket ${record.reference} raised in conversation on ${channel}.`,
-    metadata: { reference: record.reference, category: details.supportCategory, source: context.source },
+    message: `Appointment ${record.reference} requested on ${channel}.`,
+    metadata: { reference: record.reference, mode: details.meetingMode, source: context.source },
   });
 }
 
 // ------------------------------------------------------------- Turn state ---
 
 /**
- * Store the customer's details and the assistant's memory at the end of a
- * WhatsApp turn. Locked like `syncCapture`, and the record references a sync
- * wrote during the turn are kept.
+ * Store the customer's details and the engine's memory at the end of a turn.
+ * Locked like `syncCapture`, and the record references written during the
+ * turn are kept.
  */
 export async function saveTurn(
   conversationId: string,
   details: CustomerDetails,
   bot: unknown,
-  records: Partial<Pick<CaptureState, "ticketId" | "ticketReference" | "meetingId" | "meetingReference">> = {}
+  records: Partial<Pick<CaptureState, "ticketId" | "ticketReference" | "meetingId" | "meetingReference" | "quoteId" | "quoteReference" | "customerId">> = {},
+  intent?: string
 ): Promise<void> {
   try {
     await prisma.$transaction(async (tx) => {
@@ -557,7 +509,11 @@ export async function saveTurn(
       };
       await tx.conversation.update({
         where: { id: conversationId },
-        data: { capture: next as unknown as Prisma.InputJsonValue },
+        data: {
+          capture: next as unknown as Prisma.InputJsonValue,
+          ...(intent ? { intent } : {}),
+          ...(records.customerId ? { customerId: records.customerId } : {}),
+        },
       });
     });
   } catch (error) {

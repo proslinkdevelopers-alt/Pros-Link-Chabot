@@ -7,10 +7,14 @@
  *
  *    • Roles and permissions, mirrored from src/lib/permissions.ts
  *    • One Super Admin, from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
+ *    • Product categories (src/data/catalog.ts) — no products: those, with
+ *      their specifications, availability and prices, come from the team
+ *    • Brands named in the brief, unverified and inactive until staff confirm them
+ *    • The starting knowledge base (src/data/knowledge)
  *
  *  Idempotent: every write is an upsert or an existence check, so it is safe to
- *  re-run. It never deletes, and it never touches a row that belongs to another
- *  tenant.
+ *  re-run. It never deletes, never overwrites what staff have edited, and never
+ *  touches a row that belongs to another tenant.
  *
  *  Run with:  npm run db:seed
  * =============================================================================
@@ -20,6 +24,8 @@ import bcrypt from "bcryptjs";
 import { ALL_PERMISSIONS, PERMISSIONS, ROLE_INFO, ROLE_PERMISSIONS, STAFF_ROLES } from "../src/lib/permissions";
 import { passwordProblem } from "../src/lib/password";
 import { DEPARTMENT } from "../src/config/brand";
+import { DEFAULT_BRANDS, DEFAULT_CATEGORIES } from "../src/data/catalog";
+import { DEFAULT_KNOWLEDGE } from "../src/data/knowledge";
 
 const prisma = new PrismaClient();
 
@@ -107,11 +113,69 @@ async function seedUsers() {
   console.log(`   ✔ Super Admin: ${email}`);
 }
 
+// ---------------------------------------------------------------- Content ---
+
+/** Categories and brands. Existing rows are left exactly as staff last saved them. */
+async function seedCatalog() {
+  for (const [index, category] of DEFAULT_CATEGORIES.entries()) {
+    await prisma.productCategory.upsert({
+      where: { department_slug: { department: DEPARTMENT, slug: category.slug } },
+      update: {},
+      create: {
+        department: DEPARTMENT,
+        slug: category.slug,
+        name: category.name,
+        description: category.description,
+        icon: category.icon,
+        sortOrder: index,
+      },
+    });
+  }
+  console.log(`   ✔ Product categories: ${DEFAULT_CATEGORIES.length}`);
+
+  for (const [index, brand] of DEFAULT_BRANDS.entries()) {
+    await prisma.brand.upsert({
+      where: { department_slug: { department: DEPARTMENT, slug: brand.slug } },
+      update: {},
+      // Hidden from customers until someone at Pros-Link verifies the partnership.
+      create: { department: DEPARTMENT, slug: brand.slug, name: brand.name, notes: brand.notes, isVerified: false, isActive: false, sortOrder: index },
+    });
+  }
+  console.log(`   ✔ Brands: ${DEFAULT_BRANDS.length} (unverified, inactive)`);
+}
+
+/** The starting knowledge base. An article that already exists is never overwritten. */
+async function seedKnowledge() {
+  let created = 0;
+  for (const [index, entry] of DEFAULT_KNOWLEDGE.entries()) {
+    const existing = await prisma.knowledgeArticle.findUnique({ where: { slug: entry.id }, select: { id: true } });
+    if (existing) continue;
+    await prisma.knowledgeArticle.create({
+      data: {
+        slug: entry.id,
+        department: DEPARTMENT,
+        kind: entry.kind,
+        category: entry.category,
+        question: entry.question,
+        answer: entry.answer,
+        keywords: entry.keywords,
+        language: "EN",
+        state: "PUBLISHED",
+        sortOrder: index,
+      },
+    });
+    created += 1;
+  }
+  console.log(`   ✔ Knowledge articles: ${created} added, ${DEFAULT_KNOWLEDGE.length - created} already present`);
+}
+
 async function main() {
   console.log("🌱  Seeding the Pros-Link database…\n");
 
   await seedPermissionsAndRoles();
   await seedUsers();
+  await seedCatalog();
+  await seedKnowledge();
 
   console.log("\n✅  Seed complete.");
 }

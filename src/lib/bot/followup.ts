@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db";
 import { DEPARTMENT } from "@/config/brand";
 import { asLanguage, type Language } from "@/lib/i18n";
 import { logEvent } from "@/lib/notify";
-import { findService } from "@/data/marketing/services";
 import { sendButtons, sendList, sendTemplate, sendText } from "@/lib/whatsapp/client";
 import { getBotConfig } from "./config";
 import { isOpen } from "./hours";
@@ -21,7 +20,7 @@ import { fill, pick } from "./text";
  *    • to anyone who opted out or was blocked,
  *    • while a person on the team is handling the conversation,
  *    • when the customer is the one waiting for a reply,
- *    • to a lead that is won, lost, spam or a support case,
+ *    • to a lead that is won, lost or spam, or already has a quotation,
  *    • outside business hours (when configured),
  *    • outside WhatsApp's 24-hour window without an approved template.
  *
@@ -32,7 +31,7 @@ import { fill, pick } from "./text";
  */
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
-const CLOSED_STAGES: LeadStage[] = ["WON", "LOST", "SPAM", "OPTED_OUT", "SUPPORT"];
+const CLOSED_STAGES: LeadStage[] = ["WON", "LOST", "SPAM", "OPTED_OUT", "SUPPORT", "QUOTED", "NEGOTIATION"];
 const LANGUAGE_BY_ENUM: Record<string, Language> = { EN: "en", UR: "ur", UR_ROMAN: "ur_roman", PA: "pa" };
 
 export interface FollowUpReport {
@@ -57,6 +56,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
 
   const leads = await prisma.lead.findMany({
     where: {
+      department: DEPARTMENT,
       source: "WHATSAPP",
       temperature: { in: rules.temperatures },
       stage: { notIn: CLOSED_STAGES },
@@ -72,7 +72,6 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
       phone: true,
       stage: true,
       subService: true,
-      serviceSlug: true,
       followUpCount: true,
       conversation: {
         select: { id: true, contactPhone: true, handedOff: true, botPaused: true, language: true },
@@ -93,7 +92,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
     }
 
     const contact = await prisma.whatsappContact.findFirst({
-      where: { phone: conversation.contactPhone },
+      where: { phone: conversation.contactPhone, department: DEPARTMENT },
       select: { waId: true, optedOut: true, isBlocked: true, lastInboundAt: true },
     });
     if (!contact || contact.optedOut || contact.isBlocked) {
@@ -123,7 +122,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
     }
 
     const language = asLanguage(LANGUAGE_BY_ENUM[conversation.language]) ?? "en";
-    const service = lead.subService ?? (lead.serviceSlug ? findService(lead.serviceSlug)?.name : undefined) ?? "project";
+    const service = lead.subService ?? "office equipment";
     const firstName = lead.name && lead.name !== "WhatsApp contact" ? lead.name.split(" ")[0] : undefined;
     const body = fill(pick(rules.message, language), { name: firstName, service });
 
@@ -187,13 +186,13 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
         data: {
           followUpCount: { increment: 1 },
           lastFollowUpAt: now,
-          ...(lead.stage === "NEW" || lead.stage === "CONTACTED" ? { stage: "FOLLOW_UP" as const } : {}),
         },
       }),
       prisma.whatsappContact.update({ where: { waId: contact.waId }, data: { lastOutboundAt: now } }),
       prisma.botEvent.create({
         data: {
           department: DEPARTMENT,
+          channel: "WHATSAPP",
           type: "FOLLOW_UP_SENT",
           conversationId: conversation.id,
           leadId: lead.id,

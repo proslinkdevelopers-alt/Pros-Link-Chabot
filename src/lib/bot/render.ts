@@ -19,11 +19,13 @@ export interface Choice {
   id: string;
   title: string;
   description?: string;
+  /** A thumbnail for the web assistant. WhatsApp list rows cannot show one. */
+  imageUrl?: string;
 }
 
 export type Outgoing =
   | { type: "text"; body: string }
-  | { type: "buttons"; body: string; buttons: Choice[]; footer?: string }
+  | { type: "buttons"; body: string; buttons: Choice[]; footer?: string; header?: { imageUrl: string } }
   | { type: "list"; body: string; button: string; rows: Choice[]; footer?: string };
 
 export const LIMITS = {
@@ -70,6 +72,8 @@ export interface OfferOptions {
   footer?: string;
   /** Always use a list, even for three or fewer choices. */
   forceList?: boolean;
+  /** An image shown above a button message — a product photo. */
+  header?: { imageUrl: string };
 }
 
 /** A body with choices underneath, in as few messages as WhatsApp allows. */
@@ -97,6 +101,7 @@ export function offer(body: string, choices: Choice[], options: OfferOptions): O
         body: interactiveBody,
         buttons: choices.map((choice) => ({ id: choice.id, title: clampText(choice.title, LIMITS.buttonTitle) })),
         footer,
+        ...(options.header ? { header: options.header } : {}),
       },
     ];
   }
@@ -111,6 +116,7 @@ export function offer(body: string, choices: Choice[], options: OfferOptions): O
         id: choice.id,
         title: clampText(choice.title, LIMITS.rowTitle),
         ...(choice.description ? { description: clampText(choice.description, LIMITS.rowDescription) } : {}),
+        ...(choice.imageUrl ? { imageUrl: choice.imageUrl } : {}),
       })),
       footer,
     },

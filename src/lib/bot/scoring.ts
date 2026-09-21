@@ -30,31 +30,21 @@ const IMMEDIATE_PHRASES = [
 ];
 
 /** A timeline that means "now" — a tapped immediate option or the words for it. */
-export function isImmediate(timeline: string | undefined, config: BotConfig["options"]): boolean {
+export function isImmediate(timeline: string | undefined, options: BotConfig["options"]): boolean {
   if (!timeline) return false;
-  if (config.timelines.some((option) => option.immediate && option.value === timeline)) return true;
+  if (options.timelines.some((option) => option.immediate && option.value === timeline)) return true;
   const text = normalise(timeline);
   return IMMEDIATE_PHRASES.some((phrase) => hasPhrase(text, phrase));
 }
 
 /**
- * The largest amount in a budget, in US dollars, or null when there is none.
- * Understands "$10k", "10,000 USD", "Rs 3 lakh", "PKR 2.8M", "£5,000".
+ * The largest amount in a budget, in rupees, or null when there is none.
+ * Understands "Rs 3 lakh", "PKR 2.8M", "500k", "10 crore", "$2,000".
  */
-export function budgetInUsd(budget: string | undefined, config: BotConfig["scoring"]): number | null {
+export function budgetInPkr(budget: string | undefined, pkrPerUsd = 280): number | null {
   if (!budget) return null;
   const text = budget.toLowerCase().replace(/,/g, "");
-
-  const pkr = /(rs\.?|pkr|rupees?|روپے)/.test(text);
-  const rates: Array<[RegExp, number]> = [
-    [/£|gbp/, 1.25],
-    [/€|eur/, 1.08],
-    [/aed|dirham/, 0.27],
-    [/sar|riyal/, 0.27],
-    [/cad/, 0.73],
-    [/aud/, 0.66],
-  ];
-  const rate = pkr ? 1 / config.pkrPerUsd : rates.find(([pattern]) => pattern.test(text))?.[1] ?? 1;
+  const rate = /\$|usd|dollar/.test(text) ? pkrPerUsd : 1;
 
   let largest: number | null = null;
   for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*(k|m|mn|million|lakh|lac|crore)?/g)) {
@@ -71,13 +61,27 @@ export function budgetInUsd(budget: string | undefined, config: BotConfig["scori
   return largest;
 }
 
+/** The largest number of units in a quantity answer — "5 machines", "20+", "2-3". */
+export function quantityCount(quantity: string | undefined): number | null {
+  if (!quantity) return null;
+  const numbers = [...quantity.replace(/,/g, "").matchAll(/\d+/g)].map((match) => Number(match[0]));
+  return numbers.length ? Math.max(...numbers) : null;
+}
+
 function isHighBudget(budget: string | undefined, config: BotConfig): boolean {
   if (!budget) return false;
-  const all = [...config.options.budgets.USD, ...config.options.budgets.PKR];
-  const option = all.find((entry) => entry.value === budget);
+  const option = config.options.budgets.find((entry) => entry.value === budget);
   if (option) return Boolean(option.highValue);
-  const usd = budgetInUsd(budget, config.scoring);
-  return usd !== null && usd >= config.scoring.highBudgetUsd;
+  const pkr = budgetInPkr(budget);
+  return pkr !== null && pkr >= config.scoring.highBudgetPkr;
+}
+
+function isLargeOrder(quantity: string | undefined, config: BotConfig): boolean {
+  if (!quantity) return false;
+  const option = config.options.quantities.find((entry) => entry.value === quantity);
+  if (option) return Boolean(option.highValue);
+  const count = quantityCount(quantity);
+  return count !== null && count >= config.scoring.largeOrderQuantity;
 }
 
 function isUnsure(value: string | undefined): boolean {
@@ -103,23 +107,20 @@ export function scoreLead(details: CustomerDetails, state: BotState, config: Bot
     }
   };
 
-  add(weights.businessIdentified, "Business identified", Boolean(details.company || details.businessType));
+  add(weights.businessIdentified, "Organisation identified", Boolean(details.company || details.businessType));
   add(
-    weights.websiteProvided,
-    "Website provided",
-    Boolean(details.website && !/^no\b/i.test(details.website))
+    weights.clearRequirement,
+    "Clear requirement",
+    Boolean(details.productCategory || details.productId || details.interest || (details.requirements && details.requirements.length > 15))
   );
-  add(
-    weights.clearService,
-    "Clear service requirement",
-    Boolean(details.service || details.subService || (details.requirements && details.requirements.length > 15))
-  );
-  add(weights.budgetProvided, "Budget provided", !isUnsure(details.budget));
-  add(weights.immediateTimeline, "Immediate timeline", isImmediate(details.timeline, config.options));
-  add(weights.enterprise, "Enterprise company", Boolean(state.signals.enterprise));
+  add(weights.quantityProvided, "Quantity given", !isUnsure(details.quantity));
+  add(weights.largeOrder, "Large order", isLargeOrder(details.quantity, config));
+  add(weights.budgetProvided, "Budget given", !isUnsure(details.budget));
   add(weights.highBudget, "High budget", isHighBudget(details.budget, config));
-  add(weights.wantsStrategyCall, "Wants a strategy call", Boolean(state.signals.wantsCall));
-  add(weights.wantsDemo, "Wants a demo", Boolean(state.signals.wantsDemo));
+  add(weights.immediateTimeline, "Needs it soon", isImmediate(details.timeline, config.options));
+  add(weights.corporate, "Corporate or bulk requirement", Boolean(state.signals.enterprise));
+  add(weights.wantsCallback, "Asked for a call", Boolean(state.signals.wantsCall));
+  add(weights.wantsDemo, "Asked for a demonstration", Boolean(state.signals.wantsDemo));
 
   value = Math.min(100, value);
   return { value, temperature: temperatureFor(value, config.scoring.bands), reasons };

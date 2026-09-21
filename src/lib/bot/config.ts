@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { DEPARTMENT } from "@/config/brand";
+import { DEPARTMENT, SETTINGS_PREFIX } from "@/config/brand";
 import { logEvent } from "@/lib/notify";
-import { DEFAULT_BOT_CONFIG } from "@/data/marketing/bot";
+import { DEFAULT_BOT_CONFIG } from "@/data/bot";
 import {
   SECTION_KEYS,
   botConfigSchema,
@@ -19,7 +19,7 @@ import {
  *
  *  The effective configuration is the built-in defaults with any section an
  *  administrator has saved laid over the top. Each saved section lives in the
- *  `settings` table as `bot.<section>`.
+ *  `settings` table as `proslink.bot.<section>`, owned by this tenant.
  *
  *  Read on every WhatsApp message, so it is cached in memory for a short
  *  while; saving clears this instance's cache immediately, and other instances
@@ -31,7 +31,7 @@ import {
  * =============================================================================
  */
 
-const KEY_PREFIX = "bot.";
+const KEY_PREFIX = `${SETTINGS_PREFIX}bot.`;
 const CACHE_MS = 30_000;
 
 export interface ConfigState {
@@ -65,7 +65,7 @@ export async function loadConfigState(options: { fresh?: boolean } = {}): Promis
 
   try {
     const rows = await prisma.setting.findMany({
-      where: { key: { startsWith: KEY_PREFIX } },
+      where: { key: { startsWith: KEY_PREFIX }, department: DEPARTMENT },
       select: { key: true, value: true },
     });
 

@@ -1,9 +1,9 @@
 -- =============================================================================
 --  Pros-Link — enum values
 --
---  Adds the tenant value PROSLINK and the pipeline, ticket, quote, role and
---  activity values the platform uses. Values are only ever added: existing
---  values stay, so rows written earlier remain valid.
+--  Adds the tenant value PROSLINK and the pipeline, ticket, quote, role,
+--  appointment and activity values the platform uses. Values are only ever
+--  added: existing values stay, so rows written earlier remain valid.
 --
 --  Kept in its own migration because PostgreSQL cannot use an enum value in the
 --  transaction that adds it; the next migration is free to.
@@ -14,6 +14,8 @@ ALTER TYPE "ActivityType" ADD VALUE 'STATUS_CHANGE';
 ALTER TYPE "Department" ADD VALUE 'PROSLINK';
 ALTER TYPE "LeadStage" ADD VALUE 'QUOTE_REQUESTED';
 ALTER TYPE "LeadStage" ADD VALUE 'QUOTED';
+ALTER TYPE "MeetingMode" ADD VALUE 'SITE_VISIT';
+ALTER TYPE "MeetingMode" ADD VALUE 'PHONE_CALL';
 ALTER TYPE "QuoteStatus" ADD VALUE 'REQUESTED';
 ALTER TYPE "TicketCategory" ADD VALUE 'INSTALLATION';
 ALTER TYPE "TicketCategory" ADD VALUE 'MAINTENANCE';

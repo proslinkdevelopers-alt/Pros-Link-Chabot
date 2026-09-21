@@ -1,43 +1,53 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Send, Mic, MicOff, Paperclip, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Mic, MicOff, SendHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { speechTagFor } from "@/lib/i18n";
 
+export interface ChatInputHandle {
+  focus(): void;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
 /**
- * Chat composer with:
- *  - auto-growing textarea (Enter to send, Shift+Enter for newline)
- *  - voice input via the browser Web Speech API (English, Urdu, Punjabi)
- *  - a file/image/PDF attach button (the file name is appended to the message;
- *    binary upload handling is a server-side concern handled separately)
+ * The composer: an auto-growing textarea (Enter sends, Shift+Enter adds a
+ * line) and, where the browser supports it, voice input.
  */
-export function ChatInput({
-  onSend,
-  disabled,
-  streaming,
-  onStop,
-  placeholder = "Ask anything…  (English, اردو, Roman Urdu or پنجابی)",
-}: {
+export const ChatInput = forwardRef<ChatInputHandle, {
   onSend: (text: string) => void;
   disabled?: boolean;
-  streaming?: boolean;
-  onStop?: () => void;
-  placeholder?: string;
-}) {
+  placeholder: string;
+}>(function ChatInput({ onSend, disabled, placeholder }, ref) {
   const [value, setValue] = useState("");
   const [listening, setListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<any>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  // Auto-resize the textarea to fit content (up to a cap).
+  useImperativeHandle(ref, () => ({ focus: () => textareaRef.current?.focus() }));
+
+  useEffect(() => {
+    const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+    setVoiceSupported(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
+  }, []);
+
+  // Grow with the content, up to a cap.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [value]);
 
   function submit() {
@@ -48,118 +58,75 @@ export function ChatInput({
   }
 
   function toggleVoice() {
-    const SR =
-      (typeof window !== "undefined" &&
-        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
-      null;
-    if (!SR) {
-      alert("Voice input isn't supported in this browser.");
-      return;
-    }
+    const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+    const Recognition = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Recognition) return;
     if (listening) {
       recognitionRef.current?.stop();
       return;
     }
-    const rec = new SR();
-    rec.lang = speechTagFor(value);
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results)
-        .map((r: any) => r[0].transcript)
-        .join("");
-      setValue(transcript);
+    const recognition = new Recognition();
+    recognition.lang = speechTagFor(value);
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      setValue(Array.from(event.results).map((result) => result[0].transcript).join(""));
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recognitionRef.current = rec;
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
     setListening(true);
-    rec.start();
-  }
-
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setValue((v) => `${v}${v ? " " : ""}[Attached: ${file.name}]`);
-    }
-    e.target.value = "";
+    recognition.start();
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.8)] transition focus-within:border-brand-cyan/45 focus-within:bg-white/[0.06] focus-within:shadow-[0_0_0_4px_rgba(0,217,255,0.08)]">
-      <div className="flex items-end gap-1">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,application/pdf"
-          className="hidden"
-          onChange={onFile}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="shrink-0 text-white/50 hover:bg-white/5 hover:text-white"
-          aria-label="Attach a file, image or PDF"
-          onClick={() => fileRef.current?.click()}
-          disabled={disabled}
-        >
-          <Paperclip className="size-5" />
-        </Button>
+    <div className="flex items-end gap-1.5 rounded-xl border bg-card p-1.5 shadow-soft transition focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
+      <label htmlFor="chat-input" className="sr-only">
+        Message
+      </label>
+      <textarea
+        id="chat-input"
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        rows={1}
+        maxLength={2000}
+        placeholder={placeholder}
+        className="max-h-36 flex-1 resize-none bg-transparent px-2.5 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:outline-none"
+        disabled={disabled}
+      />
 
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          rows={1}
-          placeholder={placeholder}
-          className="max-h-40 flex-1 resize-none bg-transparent px-1 py-3 text-[14px] text-white outline-none placeholder:text-white/35"
-          disabled={disabled}
-        />
-
-        <Button
+      {voiceSupported && (
+        <button
           type="button"
-          variant={listening ? "destructive" : "ghost"}
-          size="icon"
-          className={cn("shrink-0", !listening && "text-white/50 hover:bg-white/5 hover:text-white")}
-          aria-label={listening ? "Stop voice input" : "Start voice input"}
           onClick={toggleVoice}
           disabled={disabled}
+          aria-label={listening ? "Stop voice input" : "Speak your message"}
+          aria-pressed={listening}
+          className={cn(
+            "grid size-10 shrink-0 place-items-center rounded-lg transition disabled:opacity-40",
+            listening ? "bg-destructive text-white" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          )}
         >
-          {listening ? <MicOff className="size-5" /> : <Mic className="size-5" />}
-        </Button>
+          {listening ? <MicOff className="size-[18px]" /> : <Mic className="size-[18px]" />}
+        </button>
+      )}
 
-        {streaming ? (
-          <Button
-            type="button"
-            variant="destructive"
-            size="icon"
-            className="shrink-0"
-            aria-label="Stop generating"
-            onClick={onStop}
-          >
-            <Square className="size-4" />
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="brand"
-            size="icon"
-            className={cn("shrink-0 rounded-xl", !value.trim() && "opacity-50 shadow-none")}
-            aria-label="Send message"
-            onClick={submit}
-            disabled={disabled || !value.trim()}
-          >
-            <Send className="size-5" />
-          </Button>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={disabled || !value.trim()}
+        aria-label="Send message"
+        className="grid size-10 shrink-0 place-items-center rounded-lg bg-brand text-white shadow-brand transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+      >
+        <SendHorizontal className="size-[18px]" />
+      </button>
     </div>
   );
-}
+});

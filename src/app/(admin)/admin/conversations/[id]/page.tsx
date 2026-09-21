@@ -12,7 +12,6 @@ import {
   MEETING_MODE_LABEL,
   type CustomerDetails,
 } from "@/lib/ai/customer";
-import { findService } from "@/data/marketing/services";
 import { readBotState } from "@/lib/bot/types";
 import { ConversationControls } from "@/components/admin/ConversationControls";
 import { cn, formatDateTime, humanise, isUrduScript } from "@/lib/utils";
@@ -259,7 +258,6 @@ const INTENT_LABEL: Record<string, string> = {
 };
 
 function displayDetail(key: keyof CustomerDetails, value: string): string {
-  if (key === "service") return findService(value)?.name ?? value;
   if (key === "meetingMode") return MEETING_MODE_LABEL[value as keyof typeof MEETING_MODE_LABEL] ?? value;
   if (key === "intent") return INTENT_LABEL[value] ?? value;
   if (key === "topic") return humanise(value);
