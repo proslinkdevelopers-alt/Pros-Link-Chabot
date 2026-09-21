@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/session";
-import { canAccessAdmin } from "@/lib/auth";
+import { requireApiPermission } from "@/lib/staff";
 import { countAudience } from "@/lib/whatsapp/broadcast";
 
 export const runtime = "nodejs";
@@ -21,10 +20,9 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session || !canAccessAdmin(session)) {
-    return Response.json({ error: "Not authorised." }, { status: 401 });
-  }
+  const guard = await requireApiPermission("whatsapp.manage", req);
+  if ("response" in guard) return guard.response;
+  const session = { sub: guard.staff.id, name: guard.staff.name };
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

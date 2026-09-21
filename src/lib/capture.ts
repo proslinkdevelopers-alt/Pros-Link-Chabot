@@ -179,6 +179,7 @@ export async function syncCapture(
           const lead = await tx.lead.create({
             data: {
               reference,
+              department: DEPARTMENT,
               name: name ?? "WhatsApp contact",
               phone: phone ?? "",
               ...leadColumns(details),
@@ -469,7 +470,7 @@ async function announce(
     });
     await logEvent({
       action: "lead.created",
-      entity: "MarketingLead",
+      entity: "Lead",
       entityId: record.id,
       message: `Lead ${record.reference} captured in conversation on ${channel}.`,
       metadata: { reference: record.reference, service: details.service, source: context.source },

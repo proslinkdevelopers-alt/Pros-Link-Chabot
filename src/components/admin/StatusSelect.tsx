@@ -22,7 +22,7 @@ export function StatusSelect({
   className,
 }: {
   /** Resource segment on /api/admin/<entity>/<id>. */
-  entity: "leads" | "tickets" | "meetings" | "knowledge";
+  entity: "leads" | "tickets" | "meetings" | "knowledge" | "quotes";
   id: string;
   /** Which field this control writes. */
   field: "stage" | "status" | "priority" | "state";

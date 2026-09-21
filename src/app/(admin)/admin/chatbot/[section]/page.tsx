@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { loadConfigState } from "@/lib/bot/config";
 import { SECTION_KEYS, type SectionKey } from "@/lib/bot/schema";
 import { SECTION_INFO } from "@/lib/bot/sections";
@@ -43,7 +43,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (!SECTION_KEYS.includes(section as SectionKey)) notFound();
   const key = section as SectionKey;
 
-  await requireAdmin(`/admin/chatbot/${key}`);
+  await requirePagePermission("chatbot.manage", `/admin/chatbot/${key}`);
   const state = await loadConfigState({ fresh: true });
   const info = SECTION_INFO[key];
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -25,7 +25,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 export default async function MediaPage() {
-  await requireAdmin("/admin/media");
+  await requirePagePermission("knowledge.manage", "/admin/media");
 
   const { data, error } = await safeQuery(
     () =>

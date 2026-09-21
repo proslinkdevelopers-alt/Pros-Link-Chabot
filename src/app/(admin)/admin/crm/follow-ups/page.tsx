@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -17,17 +17,17 @@ export const metadata = { title: "Follow-ups" };
 
 /** Where a timeline entry links back to, per entity type. */
 const LINKS: Record<string, (id: string) => string | null> = {
-  MarketingLead: (id) => `/admin/crm/leads/${id}`,
+  Lead: (id) => `/admin/crm/leads/${id}`,
   Ticket: () => "/admin/support/tickets",
   Customer: () => "/admin/crm/customers",
   Project: () => "/admin/catalogue/projects",
 };
 
-/** `MarketingLead` is a model name; people call it a lead. */
-const RECORD_LABELS: Record<string, string> = { MarketingLead: "Lead" };
+/** Record types as people say them. */
+const RECORD_LABELS: Record<string, string> = { Lead: "Lead" };
 
 export default async function FollowUpsPage() {
-  await requireAdmin("/admin/crm/follow-ups");
+  await requirePagePermission("leads.view", "/admin/crm/follow-ups");
   const now = new Date();
 
   const { data, error } = await safeQuery(

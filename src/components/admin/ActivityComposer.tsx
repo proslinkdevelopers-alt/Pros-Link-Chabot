@@ -20,7 +20,7 @@ export function ActivityComposer({
   entityType,
   entityId,
 }: {
-  entityType: "MarketingLead" | "Customer" | "Ticket" | "Project";
+  entityType: "Lead" | "Customer" | "Ticket" | "Project";
   entityId: string;
 }) {
   const router = useRouter();

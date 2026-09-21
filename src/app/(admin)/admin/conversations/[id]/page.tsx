@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ChannelBadge, PageHeader } from "@/components/admin/ui";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { isOwn, safeQuery } from "@/lib/admin/queries";
 import { readCapture } from "@/lib/capture";
 import {
@@ -24,7 +24,7 @@ export default async function ConversationDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  await requirePagePermission("conversations.view");
   const { id } = await params;
 
   const { data: conversation } = await safeQuery(

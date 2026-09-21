@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requirePermission } from "@/lib/admin/guard";
+import { requireApiPermission } from "@/lib/staff";
 import { isOwn } from "@/lib/admin/queries";
 import { logEvent } from "@/lib/notify";
 
@@ -14,7 +14,7 @@ const bodySchema = z
 
 /** Pause or resume the assistant on a conversation, and open or close its handover. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requirePermission("conversations.view");
+  const guard = await requireApiPermission("conversations.reply", req);
   if ("response" in guard) return guard.response;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -35,9 +35,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     action: "conversation.updated",
     entity: "Conversation",
     entityId: id,
-    message: `${guard.session.name} ${parsed.data.botPaused === false ? "resumed" : parsed.data.botPaused ? "paused" : "updated"} the assistant.`,
+    message: `${guard.staff.name} ${parsed.data.botPaused === false ? "resumed" : parsed.data.botPaused ? "paused" : "updated"} the assistant.`,
     metadata: parsed.data,
-    userId: guard.session.sub,
+    userId: guard.staff.id,
   });
   return Response.json({ ok: true });
 }

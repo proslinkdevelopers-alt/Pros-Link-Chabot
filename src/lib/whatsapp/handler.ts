@@ -111,6 +111,7 @@ async function route(message: InboundMessage): Promise<void> {
     await prisma.botEvent
       .create({
         data: {
+          department: DEPARTMENT,
           type: "CONVERSATION_STARTED",
           conversationId: conversation.id,
           value: conversation.trafficSource ?? "DIRECT_WHATSAPP",

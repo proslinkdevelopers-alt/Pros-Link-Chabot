@@ -30,6 +30,27 @@ const lowMemory = /^(1|true|yes)$/i.test(process.env.LOW_MEMORY_BUILD ?? "");
  */
 const standalone = /^(1|true|yes)$/i.test(process.env.DOCKER_BUILD ?? "");
 
+/**
+ * Content-Security-Policy, production only (the dev server needs eval). Scripts
+ * and styles come from this origin only — Next's hydration needs inline — and
+ * nothing may frame the site. Images may come from any https host because
+ * product photos and logos are entered as URLs in the console.
+ */
+const isProd = process.env.NODE_ENV === "production";
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "frame-ancestors 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join("; ");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -68,6 +89,7 @@ const nextConfig = {
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(self)" },
+          ...(isProd ? [{ key: "Content-Security-Policy", value: csp }] : []),
         ],
       },
     ];

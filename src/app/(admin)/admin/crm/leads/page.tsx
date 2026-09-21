@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { LeadSource, LeadStage, LeadTemperature, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -29,7 +29,7 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<{ stage?: string; source?: string; temperature?: string }>;
 }) {
-  await requireAdmin("/admin/crm/leads");
+  await requirePagePermission("leads.view", "/admin/crm/leads");
 
   const { stage, source, temperature } = await searchParams;
   const activeTemperature = LEAD_TEMPERATURES.includes(temperature as LeadTemperature)

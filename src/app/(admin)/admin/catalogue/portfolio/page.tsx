@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { OWN, safeQuery } from "@/lib/admin/queries";
 import { DbNotice, EmptyState, PageHeader, StatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Star } from "lucide-react";
 export const metadata = { title: "Portfolio" };
 
 export default async function PortfolioPage() {
-  await requireAdmin("/admin/catalogue/portfolio");
+  await requirePagePermission("settings.manage", "/admin/catalogue/portfolio");
 
   const { data, error } = await safeQuery(
     async () => {

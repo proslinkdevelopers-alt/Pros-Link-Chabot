@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import { DataTable, DbNotice, PageHeader, StatCard, StatusBadge } from "@/components/admin/ui";
 import { FolderKanban, Truck, Wallet } from "lucide-react";
@@ -8,7 +8,7 @@ import { formatDate, formatPkr, truncate } from "@/lib/utils";
 export const metadata = { title: "Projects" };
 
 export default async function ProjectsPage() {
-  await requireAdmin("/admin/catalogue/projects");
+  await requirePagePermission("settings.manage", "/admin/catalogue/projects");
 
   const { data, error } = await safeQuery(
     async () => {

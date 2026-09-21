@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN, OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   Callout,
   DataTable,
@@ -27,7 +27,7 @@ export const metadata = { title: "Broadcasts" };
  * them is the first thing to look at when a campaign underperforms.
  */
 export default async function BroadcastsPage() {
-  await requireAdmin("/admin/messaging/broadcasts");
+  await requirePagePermission("whatsapp.manage", "/admin/messaging/broadcasts");
 
   const { data, error } = await safeQuery(
     async () => {
@@ -46,7 +46,7 @@ export default async function BroadcastsPage() {
         // Only approved templates can open a conversation outside the 24-hour
         // window, so they are the only ones the composer is given.
         prisma.whatsappTemplate.findMany({
-          where: { status: "APPROVED", metaId: { not: null }, ...OWN_OR_GLOBAL },
+          where: { status: "APPROVED", metaId: { not: null }, ...OWN },
           orderBy: { name: "asc" },
           select: {
             id: true,

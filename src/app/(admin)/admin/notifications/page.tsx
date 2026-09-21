@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
   DbNotice,
@@ -15,19 +15,19 @@ import { formatDateTime, truncate } from "@/lib/utils";
 export const metadata = { title: "Notifications" };
 
 export default async function NotificationsPage() {
-  await requireAdmin("/admin/notifications");
+  await requirePagePermission("notifications.view", "/admin/notifications");
 
   const { data, error } = await safeQuery(
     async () => {
       const [notifications, queued, sent, failed] = await Promise.all([
         prisma.notification.findMany({
-          where: OWN_OR_GLOBAL,
+          where: OWN,
           orderBy: { createdAt: "desc" },
           take: 100,
         }),
-        prisma.notification.count({ where: { ...OWN_OR_GLOBAL, status: "QUEUED" } }),
-        prisma.notification.count({ where: { ...OWN_OR_GLOBAL, status: "SENT" } }),
-        prisma.notification.count({ where: { ...OWN_OR_GLOBAL, status: "FAILED" } }),
+        prisma.notification.count({ where: { ...OWN, status: "QUEUED" } }),
+        prisma.notification.count({ where: { ...OWN, status: "SENT" } }),
+        prisma.notification.count({ where: { ...OWN, status: "FAILED" } }),
       ]);
       return { notifications, queued, sent, failed };
     },

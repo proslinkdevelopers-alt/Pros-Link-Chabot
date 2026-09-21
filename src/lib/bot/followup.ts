@@ -164,7 +164,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
       await logEvent({
         level: "ERROR",
         action: "bot.follow_up.failed",
-        entity: "MarketingLead",
+        entity: "Lead",
         entityId: lead.id,
         message: result.error ?? "Follow-up could not be sent.",
       });
@@ -193,6 +193,7 @@ export async function runFollowUps(now = new Date()): Promise<FollowUpReport> {
       prisma.whatsappContact.update({ where: { waId: contact.waId }, data: { lastOutboundAt: now } }),
       prisma.botEvent.create({
         data: {
+          department: DEPARTMENT,
           type: "FOLLOW_UP_SENT",
           conversationId: conversation.id,
           leadId: lead.id,

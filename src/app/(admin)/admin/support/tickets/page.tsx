@@ -1,6 +1,6 @@
 import type { TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -26,7 +26,7 @@ export default async function TicketsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireAdmin("/admin/support/tickets");
+  await requirePagePermission(["tickets.view", "tickets.view_assigned"], "/admin/support/tickets");
   const { status } = await searchParams;
   const active = STATUSES.includes(status as TicketStatus)
     ? (status as TicketStatus)

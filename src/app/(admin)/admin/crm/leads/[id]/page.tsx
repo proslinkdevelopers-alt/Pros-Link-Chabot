@@ -6,7 +6,7 @@ import { PageHeader, StatusBadge } from "@/components/admin/ui";
 import { StatusSelect } from "@/components/admin/StatusSelect";
 import { ActivityComposer } from "@/components/admin/ActivityComposer";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import { findService } from "@/data/marketing/services";
 import { LEAD_STAGES } from "@/lib/admin/leads";
@@ -22,7 +22,7 @@ export default async function LeadDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  await requirePagePermission("leads.view");
 
   const { id } = await params;
 
@@ -39,7 +39,7 @@ export default async function LeadDetailPage({
           },
         }),
         prisma.crmActivity.findMany({
-          where: { entityType: "MarketingLead", entityId: id },
+          where: { entityType: "Lead", entityId: id },
           orderBy: { createdAt: "desc" },
           include: { owner: { select: { name: true } } },
         }),
@@ -133,7 +133,7 @@ export default async function LeadDetailPage({
 
           <Card className="p-5">
             <h2 className="mb-3 text-sm font-semibold">Activity & follow-ups</h2>
-            <ActivityComposer entityType="MarketingLead" entityId={lead.id} />
+            <ActivityComposer entityType="Lead" entityId={lead.id} />
 
             {data.activities.length ? (
               <ul className="mt-4 space-y-3">

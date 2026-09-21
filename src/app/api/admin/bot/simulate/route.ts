@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { requirePermission } from "@/lib/admin/guard";
+import { requireApiPermission } from "@/lib/staff";
 import { asCustomerDetails } from "@/lib/ai/customer";
 import { detectLanguage, asLanguage, type Language } from "@/lib/i18n";
 import { getBotConfig } from "@/lib/bot/config";
@@ -40,7 +40,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const guard = await requirePermission("settings.manage");
+  const guard = await requireApiPermission("chatbot.manage", req);
   if ("response" in guard) return guard.response;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

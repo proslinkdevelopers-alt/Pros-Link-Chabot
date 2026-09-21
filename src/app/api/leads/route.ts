@@ -1,3 +1,4 @@
+import { DEPARTMENT } from "@/config/brand";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
     const lead = await prisma.lead.create({
       data: {
         reference,
+        department: DEPARTMENT,
         name: data.name,
         company: data.company || null,
         phone: data.phone,
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     await logEvent({
       action: "lead.created",
-      entity: "MarketingLead",
+      entity: "Lead",
       entityId: lead.id,
       message: `Lead ${reference} captured from the assistant.`,
       ipAddress: clientIp(req),

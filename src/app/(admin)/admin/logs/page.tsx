@@ -1,7 +1,7 @@
 import type { LogLevel } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
   DbNotice,
@@ -20,13 +20,13 @@ export default async function LogsPage({
 }: {
   searchParams: Promise<{ level?: string }>;
 }) {
-  await requireAdmin("/admin/logs");
+  await requirePagePermission("audit.view", "/admin/logs");
   const { level } = await searchParams;
   const active = LEVELS.includes(level as LogLevel) ? (level as LogLevel) : undefined;
 
   const { data, error } = await safeQuery(
     async () => {
-      const where = { ...OWN_OR_GLOBAL, ...(active ? { level: active } : {}) };
+      const where = { ...OWN, ...(active ? { level: active } : {}) };
       const [logs, counts] = await Promise.all([
         prisma.systemLog.findMany({
           where,
@@ -37,7 +37,7 @@ export default async function LogsPage({
         prisma.systemLog.groupBy({
           by: ["level"],
           _count: { _all: true },
-          where: OWN_OR_GLOBAL,
+          where: OWN,
         }),
       ]);
       return { logs, counts };

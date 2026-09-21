@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import { Callout, DbNotice, PageHeader, StatCard } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
 import {
@@ -24,16 +24,16 @@ export const metadata = { title: "AI Training" };
  * queries are the highest-value edits to make next.
  */
 export default async function AiTrainingPage() {
-  await requireAdmin("/admin/ai-training");
+  await requirePagePermission("knowledge.manage", "/admin/ai-training");
 
   const { data, error } = await safeQuery(
     async () => {
       const [knowledgeCount, questionCount, handoffs, recentQuestions] = await Promise.all([
         prisma.knowledgeArticle.count({ where: { state: "PUBLISHED" } }),
-        prisma.message.count({ where: { role: "USER", ...OWN_OR_GLOBAL } }),
-        prisma.conversation.count({ where: { handedOff: true, ...OWN_OR_GLOBAL } }),
+        prisma.message.count({ where: { role: "USER", ...OWN } }),
+        prisma.conversation.count({ where: { handedOff: true, ...OWN } }),
         prisma.message.findMany({
-          where: { role: "USER", ...OWN_OR_GLOBAL },
+          where: { role: "USER", ...OWN },
           orderBy: { createdAt: "desc" },
           take: 25,
           select: { id: true, content: true, language: true, createdAt: true },

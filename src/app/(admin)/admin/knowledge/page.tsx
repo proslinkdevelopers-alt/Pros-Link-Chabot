@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -22,7 +22,7 @@ export default async function KnowledgePage({
 }: {
   searchParams: Promise<{ category?: string }>;
 }) {
-  await requireAdmin("/admin/knowledge");
+  await requirePagePermission("knowledge.view", "/admin/knowledge");
   const { category } = await searchParams;
 
   const { data, error } = await safeQuery(

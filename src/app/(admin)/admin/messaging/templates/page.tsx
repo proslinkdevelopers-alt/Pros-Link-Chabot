@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   Callout,
   DbNotice,
@@ -26,12 +26,12 @@ export const metadata = { title: "WhatsApp Templates" };
  * as approved that Meta rejected an hour ago would send nothing but errors.
  */
 export default async function TemplatesPage() {
-  await requireAdmin("/admin/messaging/templates");
+  await requirePagePermission("whatsapp.manage", "/admin/messaging/templates");
 
   const { data, error } = await safeQuery(
     async () => {
       // Templates synced from Meta arrive unassigned, and stay visible.
-      const where = OWN_OR_GLOBAL;
+      const where = OWN;
 
       const [templates, approved, pending] = await Promise.all([
         prisma.whatsappTemplate.findMany({

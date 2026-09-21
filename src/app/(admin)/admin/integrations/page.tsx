@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { Callout, PageHeader } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
 import { config } from "@/lib/config";
@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
  * reports only whether each integration is configured, never its value.
  */
 export default async function IntegrationsPage() {
-  await requireAdmin("/admin/integrations");
+  await requirePagePermission("settings.manage", "/admin/integrations");
 
   // Asked of Meta by this server, on every render. Verifying a token from a
   // laptop proves nothing about production: the panel may hold a different

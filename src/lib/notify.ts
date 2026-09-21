@@ -1,40 +1,44 @@
-import type { NotificationChannel } from "@prisma/client";
+import type { NotificationChannel, Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { config } from "./config";
 import { DEPARTMENT } from "@/config/brand";
+import { ROLE_PERMISSIONS, STAFF_ROLES, type Permission } from "./permissions";
 
 /**
  * =============================================================================
- *  Team notifications & audit logging
+ *  Notifications and the audit log
  * =============================================================================
  *
- *  Every lead, meeting request and ticket queues a notification for the team
- *  and writes an audit entry. Both are best-effort: a chat must never fail
- *  because the mailer is down or the database is briefly unreachable, so
- *  failures are logged and swallowed.
+ *  Two kinds of notification:
  *
- *  Delivery itself (SMTP / SMS / WhatsApp) is performed by a worker reading the
- *  `notifications` table — the queue row is written here, transport is not
- *  attempted inline so a slow provider can't block the request.
+ *    • in-app — one row per staff member, shown under the bell in the console
+ *      until read. Sent to named people (an assignee) or to everyone whose role
+ *      holds a permission (everyone who can work tickets).
+ *    • email — queued rows for a team inbox, delivered by whatever worker the
+ *      deployment runs against the `notifications` table.
+ *
+ *  And one audit log (`system_logs`): who did what to which record, with the
+ *  values before and after for changes.
+ *
+ *  Everything here is best-effort: a chat or a status change must never fail
+ *  because a notification could not be written, so failures are logged and
+ *  swallowed.
  * =============================================================================
  */
 
 export interface TeamNotification {
   subject: string;
   body: string;
-  /** Deep link into the admin console, e.g. `/admin/crm/leads/<id>`. */
+  /** Deep link into the console, e.g. `/admin/crm/leads/<id>`. */
   link?: string;
   channel?: NotificationChannel;
-  /**
-   * Specific recipients — a team's inboxes from the chatbot configuration.
-   * Omitted, the notification goes to the sales inbox.
-   */
+  /** Team inboxes from the chatbot configuration; omitted, the sales inbox. */
   to?: string[];
 }
 
-/** Queue a notification for the sales team's inbox, or for the recipients given. */
+/** Queue an email notification for a team inbox. Skipped when no inbox is configured. */
 export async function notifyTeam(notification: TeamNotification): Promise<void> {
-  const fallback = config.routing.salesEmail ?? config.mail.from;
+  const fallback = config.routing.salesEmail;
   const recipients = notification.to?.length ? notification.to : fallback ? [fallback] : [];
   if (!recipients.length) return;
 
@@ -51,6 +55,51 @@ export async function notifyTeam(notification: TeamNotification): Promise<void> 
     });
   } catch (error) {
     console.warn("[notify] queue skipped:", errorMessage(error));
+  }
+}
+
+export interface StaffNotification {
+  subject: string;
+  body?: string;
+  link?: string;
+  /** Specific people, e.g. the new assignee. */
+  userIds?: Array<string | null | undefined>;
+  /** Everyone whose role holds this permission. */
+  permission?: Permission;
+  /** Leave this person out — usually whoever caused the notification. */
+  exceptUserId?: string;
+}
+
+/** In-app notifications under the console bell. */
+export async function notifyStaff(notification: StaffNotification): Promise<void> {
+  try {
+    const ids = new Set(notification.userIds?.filter((id): id is string => Boolean(id)));
+
+    if (notification.permission) {
+      const roles = STAFF_ROLES.filter((role) => ROLE_PERMISSIONS[role].includes(notification.permission!));
+      const users = await prisma.user.findMany({
+        where: { department: DEPARTMENT, isActive: true, role: { in: roles } },
+        select: { id: true },
+        take: 200,
+      });
+      for (const user of users) ids.add(user.id);
+    }
+    if (notification.exceptUserId) ids.delete(notification.exceptUserId);
+    if (!ids.size) return;
+
+    await prisma.notification.createMany({
+      data: [...ids].map((userId) => ({
+        department: DEPARTMENT,
+        channel: "IN_APP" as const,
+        to: userId,
+        userId,
+        subject: notification.subject,
+        body: notification.body ?? "",
+        link: notification.link,
+      })),
+    });
+  } catch (error) {
+    console.warn("[notify] in-app skipped:", errorMessage(error));
   }
 }
 
@@ -77,9 +126,9 @@ export async function logEvent(entry: AuditEntry): Promise<void> {
         entity: entry.entity,
         entityId: entry.entityId,
         message: entry.message,
-        metadata: entry.metadata as never,
+        metadata: entry.metadata as Prisma.InputJsonValue | undefined,
         ipAddress: entry.ipAddress,
-        userAgent: entry.userAgent,
+        userAgent: entry.userAgent?.slice(0, 300),
         userId: entry.userId,
       },
     });
@@ -88,6 +137,61 @@ export async function logEvent(entry: AuditEntry): Promise<void> {
   }
 }
 
+/** The fields whose values differ, with before and after, for the audit log. */
+export function diff(
+  before: Record<string, unknown> | null | undefined,
+  after: Record<string, unknown>
+): Record<string, { from: unknown; to: unknown }> {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [key, value] of Object.entries(after)) {
+    const previous = before?.[key];
+    if (JSON.stringify(normalise(previous)) !== JSON.stringify(normalise(value))) {
+      changes[key] = { from: normalise(previous) ?? null, to: normalise(value) ?? null };
+    }
+  }
+  return changes;
+}
+
+function normalise(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (value && typeof value === "object" && "toNumber" in value && typeof (value as { toNumber: unknown }).toNumber === "function") {
+    return (value as { toNumber: () => number }).toNumber();
+  }
+  return value;
+}
+
+/**
+ * Record a change a staff member made: the action, the record, and each field
+ * that changed with its previous and new value.
+ */
+export async function audit(input: {
+  action: string;
+  entity: string;
+  entityId: string;
+  userId?: string;
+  message?: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown>;
+  extra?: Record<string, unknown>;
+  req?: Request;
+}): Promise<void> {
+  const changes = input.after ? diff(input.before, input.after) : undefined;
+  await logEvent({
+    action: input.action,
+    entity: input.entity,
+    entityId: input.entityId,
+    userId: input.userId,
+    message: input.message,
+    metadata: { ...(changes && Object.keys(changes).length ? { changes } : {}), ...(input.extra ?? {}) },
+    ipAddress: input.req ? clientIpOf(input.req) : undefined,
+    userAgent: input.req?.headers.get("user-agent") ?? undefined,
+  });
+}
+
+export function clientIpOf(req: Request): string | undefined {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || undefined;
+}
+
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error ? error.message.split("\n").find(Boolean) ?? error.message : String(error);
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BarChart3, Bot, ChevronRight, FlaskConical } from "lucide-react";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { loadConfigState } from "@/lib/bot/config";
 import { SECTION_KEYS } from "@/lib/bot/schema";
 import { SECTION_INFO } from "@/lib/bot/sections";
@@ -12,7 +12,7 @@ import { config } from "@/lib/config";
 export const metadata = { title: "Chatbot Studio" };
 
 export default async function ChatbotStudioPage() {
-  await requireAdmin("/admin/chatbot");
+  await requirePagePermission("chatbot.manage", "/admin/chatbot");
   const state = await loadConfigState({ fresh: true });
   const groups = Array.from(new Set(SECTION_KEYS.map((key) => SECTION_INFO[key].group)));
   const { nodes } = state.config.menu;

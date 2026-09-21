@@ -15,6 +15,9 @@ const bool = (def: boolean) =>
 
 const optional = z.string().optional();
 
+/** Used only outside production. A production server refuses to start with it. */
+const DEV_JWT_SECRET = "dev-insecure-secret-change-me";
+
 /**
  * Normalise NODE_ENV instead of rejecting it.
  *
@@ -34,13 +37,13 @@ const nodeEnv = z.preprocess((value) => {
 
 const schema = z.object({
   NODE_ENV: nodeEnv.default("development"),
-  APP_NAME: z.string().default("BITSOL AI Assistant"),
+  APP_NAME: z.string().default("Pros-Link"),
   APP_URL: z.string().default("http://localhost:3000"),
 
   DATABASE_URL: optional,
   REDIS_URL: optional,
 
-  JWT_SECRET: z.string().default("dev-insecure-secret-change-me"),
+  JWT_SECRET: z.string().default(DEV_JWT_SECRET),
   JWT_EXPIRES_IN: z.string().default("7d"),
   BCRYPT_ROUNDS: z.coerce.number().int().min(8).max(15).default(12),
 
@@ -85,10 +88,10 @@ const schema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: optional,
   SMTP_PASSWORD: optional,
-  SMTP_FROM: z.string().default("BITSOL <no-reply@bitsolmarketing.com>"),
+  SMTP_FROM: z.string().default(""),
 
   SMS_API_KEY: optional,
-  SMS_SENDER_ID: z.string().default("BITSOL"),
+  SMS_SENDER_ID: z.string().default(""),
 
   // --- WhatsApp Business Cloud API (Meta) ----------------------------------
   /** Phone number ID of the business number (Meta → WhatsApp → API Setup). */
@@ -156,6 +159,26 @@ if (!parsed.success) {
 // the invalid values forward. Only reached during a build.
 const env = parsed.success ? parsed.data : schema.parse({ NODE_ENV: "production" });
 
+/**
+ * Anyone who knows the signing secret can mint a Super Admin session, so a
+ * running production server refuses the published development default and
+ * anything short enough to guess. Checked at runtime only — a build has no
+ * business needing the secret.
+ */
+if (env.NODE_ENV === "production" && !isBuildPhase) {
+  if (env.JWT_SECRET === DEV_JWT_SECRET || env.JWT_SECRET.length < 32) {
+    throw new Error("JWT_SECRET must be set to a random value of at least 32 characters in production.");
+  }
+}
+
+/** `7d`, `12h`, `30m` or seconds → seconds, for the session cookie's lifetime. */
+function durationSeconds(value: string): number {
+  const match = /^(\d+)\s*([smhd]?)$/i.exec(value.trim());
+  if (!match) return 7 * 24 * 3600;
+  const unit = { s: 1, m: 60, h: 3600, d: 86400, "": 1 }[match[2].toLowerCase() as "s" | "m" | "h" | "d" | ""];
+  return Number(match[1]) * unit;
+}
+
 /** The model used when AI_MODEL is unset — one that exists on each provider. */
 const DEFAULT_MODEL: Record<typeof env.AI_PROVIDER, string> = {
   claude: "claude-opus-4-8",
@@ -178,6 +201,7 @@ export const config = {
   jwt: {
     secret: env.JWT_SECRET,
     expiresIn: env.JWT_EXPIRES_IN,
+    maxAgeSeconds: durationSeconds(env.JWT_EXPIRES_IN),
   },
   bcryptRounds: env.BCRYPT_ROUNDS,
 

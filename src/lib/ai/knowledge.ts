@@ -55,3 +55,8 @@ function normalize(text: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** Forget cached knowledge after an edit in the console. */
+export function invalidateKnowledge(): void {
+  /* the static knowledge base has no cache */
+}

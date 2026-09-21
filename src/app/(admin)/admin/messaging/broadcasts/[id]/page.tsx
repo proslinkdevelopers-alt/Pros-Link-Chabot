@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CheckCheck, Send, TriangleAlert, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { isOwn, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -31,7 +31,7 @@ export default async function BroadcastDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin("/admin/messaging/broadcasts");
+  await requirePagePermission("whatsapp.manage", "/admin/messaging/broadcasts");
   const { id } = await params;
 
   const { data, error } = await safeQuery(

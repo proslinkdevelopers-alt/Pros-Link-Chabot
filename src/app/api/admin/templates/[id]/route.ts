@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/session";
-import { canAccessAdmin } from "@/lib/auth";
+import { requireApiPermission } from "@/lib/staff";
 import { isOwn } from "@/lib/admin/queries";
 import { logEvent } from "@/lib/notify";
 import { deleteTemplate } from "@/lib/whatsapp/templates";
@@ -29,10 +28,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session || !canAccessAdmin(session)) {
-    return Response.json({ error: "Not authorised." }, { status: 401 });
-  }
+  const guard = await requireApiPermission("whatsapp.manage", req);
+  if ("response" in guard) return guard.response;
+  const session = { sub: guard.staff.id, name: guard.staff.name };
 
   const { id } = await params;
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
@@ -74,13 +72,12 @@ export async function PATCH(
  * without a Graph call.
  */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session || !canAccessAdmin(session)) {
-    return Response.json({ error: "Not authorised." }, { status: 401 });
-  }
+  const guard = await requireApiPermission("whatsapp.manage", req);
+  if ("response" in guard) return guard.response;
+  const session = { sub: guard.staff.id, name: guard.staff.name };
 
   const { id } = await params;
   const template = await prisma.whatsappTemplate.findUnique({ where: { id } });

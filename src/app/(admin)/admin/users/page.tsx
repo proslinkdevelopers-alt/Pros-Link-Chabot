@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   Callout,
   DataTable,
@@ -13,12 +13,12 @@ import { formatDateTime, humanise } from "@/lib/utils";
 export const metadata = { title: "Users" };
 
 export default async function UsersPage() {
-  await requireAdmin("/admin/users");
+  await requirePagePermission("team.manage", "/admin/users");
 
   const { data, error } = await safeQuery(
     () =>
       prisma.user.findMany({
-        where: OWN_OR_GLOBAL,
+        where: OWN,
         orderBy: [{ role: "desc" }, { name: "asc" }],
         take: 200,
         include: { rbac: { select: { name: true } } },

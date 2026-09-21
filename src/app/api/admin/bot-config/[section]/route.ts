@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requirePermission } from "@/lib/admin/guard";
+import { requireApiPermission } from "@/lib/staff";
 import { resetSection, saveSection } from "@/lib/bot/config";
 import { SECTION_KEYS, type SectionKey } from "@/lib/bot/schema";
 
@@ -16,7 +16,7 @@ function sectionOf(value: string): SectionKey | null {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ section: string }> }) {
-  const guard = await requirePermission("settings.manage");
+  const guard = await requireApiPermission("chatbot.manage", req);
   if ("response" in guard) return guard.response;
 
   const section = sectionOf((await params).section);
@@ -26,7 +26,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ sect
   if (body === undefined) return Response.json({ ok: false, issues: ["The body is not valid JSON."] }, { status: 400 });
 
   try {
-    const result = await saveSection(section, body, guard.session.sub);
+    const result = await saveSection(section, body, guard.staff.id);
     return Response.json(result, { status: result.ok ? 200 : 422 });
   } catch (error) {
     console.error("[bot-config] save failed:", error);
@@ -34,15 +34,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ sect
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ section: string }> }) {
-  const guard = await requirePermission("settings.manage");
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ section: string }> }) {
+  const guard = await requireApiPermission("chatbot.manage", req);
   if ("response" in guard) return guard.response;
 
   const section = sectionOf((await params).section);
   if (!section) return Response.json({ error: "Unknown section." }, { status: 404 });
 
   try {
-    await resetSection(section, guard.session.sub);
+    await resetSection(section, guard.staff.id);
     return Response.json({ ok: true });
   } catch (error) {
     console.error("[bot-config] reset failed:", error);

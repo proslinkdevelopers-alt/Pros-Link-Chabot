@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { config } from "@/lib/config";
 import { Callout, PageHeader } from "@/components/admin/ui";
 import { BotSimulator } from "@/components/admin/BotSimulator";
@@ -8,7 +8,7 @@ import { BotSimulator } from "@/components/admin/BotSimulator";
 export const metadata = { title: "Chatbot Simulator" };
 
 export default async function SimulatorPage() {
-  await requireAdmin("/admin/chatbot/simulator");
+  await requirePagePermission("chatbot.manage", "/admin/chatbot/simulator");
   const hasModel = Boolean(config.ai.anthropicApiKey || config.ai.openaiApiKey || config.ai.geminiApiKey || config.ai.provider === "ollama");
 
   return (

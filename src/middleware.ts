@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySession, canAccessAdmin } from "@/lib/auth";
+import { SESSION_COOKIE, verifySession, canAccessAdmin } from "@/lib/auth-token";
 
 /**
  * Edge middleware guarding the admin console.
  *
- * This is defence in depth, not the only gate: `requireAdmin()` in the admin
- * layout re-checks the session on every render, and each API route checks it
- * again before writing. Doing it here as well means an unauthenticated request
- * is turned away before any page code or database query runs.
+ * This is defence in depth, not the only gate: the admin layout and every page
+ * re-check the account against the database and its role's permissions
+ * (`lib/staff.ts`), and each API route does the same before reading or
+ * writing. Doing it here as well means a request without a valid console
+ * session is turned away before any page code or database query runs.
  *
  * `jose` verification works in the Edge runtime, which is why auth.ts uses it
  * rather than `jsonwebtoken`.

@@ -1,35 +1,29 @@
 import type { Metadata } from "next";
 import { AdminShell } from "@/components/admin/AdminShell";
-import { requireAdmin } from "@/lib/session";
-import { loadPermissions, navCounts } from "@/lib/admin/queries";
+import { requireStaff } from "@/lib/staff";
+import { navCounts } from "@/lib/admin/queries";
+import { BRAND } from "@/config/brand";
 
 export const metadata: Metadata = {
-  title: { default: "Admin", template: "%s · BITSOL Admin" },
+  title: { default: "Admin", template: `%s · ${BRAND.console.name}` },
   robots: { index: false, follow: false },
 };
 
 /** Admin pages read live data on every request. */
 export const dynamic = "force-dynamic";
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  // Gate the whole console here so no page can be reached without a session.
-  const session = await requireAdmin();
-
-  const [permissions, badges] = await Promise.all([
-    loadPermissions(session),
-    navCounts(),
-  ]);
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Gate the whole console here so no page can be reached without a verified
+  // staff account; each page then checks its own permission.
+  const staff = await requireStaff();
+  const badges = await navCounts();
 
   return (
     <AdminShell
-      user={{ name: session.name, role: session.role }}
+      user={{ name: staff.name, role: staff.role }}
       // Only serializable values cross into the client component — the nav
       // tree is built there, since each item carries a Lucide icon function.
-      permissions={permissions ? [...permissions] : null}
+      permissions={[...staff.permissions]}
       badges={badges}
     >
       {children}

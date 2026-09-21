@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { OWN, safeQuery } from "@/lib/admin/queries";
 import { DbNotice, EmptyState, PageHeader, StatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { formatDateTime } from "@/lib/utils";
 export const metadata = { title: "Events" };
 
 export default async function EventsPage() {
-  await requireAdmin("/admin/events");
+  await requirePagePermission("settings.manage", "/admin/events");
   const now = new Date();
 
   const { data, error } = await safeQuery(

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { DEPARTMENT } from "@/config/brand";
-import { requirePermission } from "@/lib/admin/guard";
+import { requireApiPermission } from "@/lib/staff";
 import { isOwn } from "@/lib/admin/queries";
 import { logEvent } from "@/lib/notify";
 import { sendText } from "@/lib/whatsapp/client";
@@ -26,7 +26,7 @@ const bodySchema = z.object({
  * says so plainly instead of letting Meta reject the send.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requirePermission("conversations.view");
+  const guard = await requireApiPermission("conversations.reply", req);
   if ("response" in guard) return guard.response;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         content: parsed.data.text,
         department: DEPARTMENT,
         externalId: result.messageId,
-        authorId: guard.session.sub,
+        authorId: guard.staff.id,
       },
     }),
     prisma.conversation.update({
@@ -81,8 +81,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     action: "whatsapp.agent.replied",
     entity: "Conversation",
     entityId: id,
-    message: `${guard.session.name} replied on WhatsApp.`,
-    userId: guard.session.sub,
+    message: `${guard.staff.name} replied on WhatsApp.`,
+    userId: guard.staff.id,
   });
 
   return Response.json({ ok: true });

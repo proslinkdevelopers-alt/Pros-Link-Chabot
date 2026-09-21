@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { dashboardStats, OWN, OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { dashboardStats, OWN, safeQuery } from "@/lib/admin/queries";
 import { DbNotice, PageHeader, StatCard } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
 import { MessagesSquare, Percent, Timer, TrendingUp } from "lucide-react";
@@ -12,7 +12,7 @@ export const metadata = { title: "Reports & Analytics" };
 const DAYS = 30;
 
 export default async function ReportsPage() {
-  await requireAdmin("/admin/reports");
+  await requirePagePermission("reports.view", "/admin/reports");
   const since = new Date();
   since.setDate(since.getDate() - DAYS);
   since.setHours(0, 0, 0, 0);
@@ -25,7 +25,7 @@ export default async function ReportsPage() {
           const [conversations, leadStages, leadSources, ticketStatuses, latency] =
             await Promise.all([
               prisma.conversation.findMany({
-                where: { ...OWN_OR_GLOBAL, createdAt: { gte: since } },
+                where: { ...OWN, createdAt: { gte: since } },
                 select: { createdAt: true },
               }),
               prisma.lead.groupBy({ by: ["stage"], _count: { _all: true } }),
@@ -40,7 +40,7 @@ export default async function ReportsPage() {
                   role: "ASSISTANT",
                   createdAt: { gte: since },
                   latencyMs: { not: null },
-                  ...OWN_OR_GLOBAL,
+                  ...OWN,
                 },
                 _avg: { latencyMs: true },
               }),

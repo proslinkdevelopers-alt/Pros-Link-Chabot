@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { OWN, OWN_OR_GLOBAL, safeQuery, type QueryResult } from "@/lib/admin/queries";
+import { OWN, safeQuery, type QueryResult } from "@/lib/admin/queries";
 
 /**
  * =============================================================================
@@ -124,7 +124,7 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
   since.setHours(0, 0, 0, 0);
 
   return safeQuery(async () => {
-    const whatsappConversations = { channel: "WHATSAPP" as const, createdAt: { gte: since }, ...OWN_OR_GLOBAL };
+    const whatsappConversations = { channel: "WHATSAPP" as const, createdAt: { gte: since }, ...OWN };
     const whatsappLeads = { source: "WHATSAPP" as const, createdAt: { gte: since } };
     const eventsSince = { createdAt: { gte: since } };
 

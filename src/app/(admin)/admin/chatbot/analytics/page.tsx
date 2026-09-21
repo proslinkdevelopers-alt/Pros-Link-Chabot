@@ -15,7 +15,7 @@ import {
   TrendingUp,
   UserPlus,
 } from "lucide-react";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { chatbotAnalytics, type ChatbotAnalytics } from "@/lib/bot/analytics";
 import { loadConfigState } from "@/lib/bot/config";
 import { DEFAULT_BOT_CONFIG } from "@/data/marketing/bot";
@@ -43,7 +43,7 @@ export default async function ChatbotAnalyticsPage({
 }: {
   searchParams: Promise<{ view?: string; days?: string }>;
 }) {
-  await requireAdmin("/admin/chatbot/analytics");
+  await requirePagePermission("reports.view", "/admin/chatbot/analytics");
   const params = await searchParams;
   const view: View = params.view && params.view in VIEWS ? (params.view as View) : "ceo";
   const days = RANGES.find((range) => String(range) === params.days) ?? 30;

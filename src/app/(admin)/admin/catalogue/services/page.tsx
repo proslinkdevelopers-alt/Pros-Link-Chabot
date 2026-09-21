@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import { Callout, DbNotice, PageHeader, StatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { MARKETING_SERVICES } from "@/data/marketing/services";
 export const metadata = { title: "Services" };
 
 export default async function ServicesPage() {
-  await requireAdmin("/admin/catalogue/services");
+  await requirePagePermission("settings.manage", "/admin/catalogue/services");
 
   // The database is the live source; the file catalogue is the fallback so the
   // page is still useful before the first `db:seed`.

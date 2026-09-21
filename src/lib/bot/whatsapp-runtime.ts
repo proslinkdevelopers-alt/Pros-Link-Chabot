@@ -136,6 +136,7 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
     await prisma.botEvent
       .create({
         data: {
+          department: DEPARTMENT,
           type: effect.event,
           channel: "WHATSAPP",
           conversationId: ctx.conversationId,
@@ -300,6 +301,7 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
           await prisma.quote.create({
             data: {
               reference,
+              department: DEPARTMENT,
               title: truncate(`${effect.title} — ${details.company ?? customerName(details)}`, 180),
               status: "DRAFT",
               currency: details.country === "Pakistan" ? "PKR" : "USD",
@@ -372,7 +374,7 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
               data: {
                 department: DEPARTMENT,
                 type: "FOLLOW_UP",
-                entityType: "MarketingLead",
+                entityType: "Lead",
                 entityId: leadId,
                 body: `Schedule: ${effect.topic}. ${effect.note ? `Customer's preferred time: "${effect.note}".` : "No time given yet."}`,
                 dueAt: new Date(ctx.now.getTime() + 2 * 3_600_000),
@@ -443,7 +445,7 @@ export function createWhatsAppRuntime(ctx: WhatsAppRuntimeContext): WhatsAppRunt
               data: {
                 department: DEPARTMENT,
                 type: "NOTE",
-                entityType: "MarketingLead",
+                entityType: "Lead",
                 entityId: leadId,
                 body: `Lead scored ${score.value}/100 (${score.temperature}). ${score.reasons.join(", ")}.`,
               },

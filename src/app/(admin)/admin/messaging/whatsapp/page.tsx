@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { MessageCircle, Briefcase, Clock, PhoneForwarded } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   Callout,
   DataTable,
@@ -26,13 +26,13 @@ const WINDOW_MS = 24 * 60 * 60 * 1000;
  * window is still open, and what the conversation produced.
  */
 export default async function WhatsappInboxPage() {
-  await requireAdmin("/admin/messaging/whatsapp");
+  await requirePagePermission("conversations.view", "/admin/messaging/whatsapp");
   const openedAfter = new Date(Date.now() - WINDOW_MS);
 
   const { data, error } = await safeQuery(
     async () => {
       const contacts = await prisma.whatsappContact.findMany({
-        where: OWN_OR_GLOBAL,
+        where: OWN,
         orderBy: { lastInboundAt: "desc" },
         take: 100,
       });
@@ -42,16 +42,16 @@ export default async function WhatsappInboxPage() {
       const [conversations, leads, handoffs, totals] = await Promise.all([
         phones.length
           ? prisma.conversation.findMany({
-              where: { channel: "WHATSAPP", contactPhone: { in: phones }, ...OWN_OR_GLOBAL },
+              where: { channel: "WHATSAPP", contactPhone: { in: phones }, ...OWN },
               orderBy: { updatedAt: "desc" },
               select: { id: true, contactPhone: true, handedOff: true },
             })
           : Promise.resolve([]),
         prisma.lead.count({ where: { source: "WHATSAPP" } }),
         prisma.conversation.count({
-          where: { channel: "WHATSAPP", handedOff: true, ...OWN_OR_GLOBAL },
+          where: { channel: "WHATSAPP", handedOff: true, ...OWN },
         }),
-        prisma.whatsappContact.count({ where: OWN_OR_GLOBAL }),
+        prisma.whatsappContact.count({ where: OWN }),
       ]);
 
       // First match wins — the list is already newest-first.

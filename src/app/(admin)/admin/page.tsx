@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { DbNotice, EmptyState, PageHeader, StatCard } from "@/components/admin/ui";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { dashboardStats } from "@/lib/admin/queries";
 import { findService } from "@/data/marketing/services";
 import { formatDateTime, formatPkr, humanise } from "@/lib/utils";
@@ -21,7 +21,7 @@ import { formatDateTime, formatPkr, humanise } from "@/lib/utils";
 export const metadata = { title: "Dashboard" };
 
 export default async function AdminDashboard() {
-  const session = await requireAdmin();
+  const session = await requirePagePermission("dashboard.view");
   const { data: stats, error } = await dashboardStats();
 
   return (

@@ -34,8 +34,8 @@ export function AdminShell({
   children,
 }: {
   user: AdminUser;
-  /** Granted permission keys, or null for unrestricted (admin/super-admin). */
-  permissions: string[] | null;
+  /** Granted permission keys. */
+  permissions: string[];
   badges: NavBadges;
   children: React.ReactNode;
 }) {
@@ -43,7 +43,7 @@ export function AdminShell({
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const groups = visibleNav(permissions ? new Set(permissions) : null);
+  const groups = visibleNav(new Set(permissions));
   const initials = user.name
     .split(/\s+/)
     .slice(0, 2)

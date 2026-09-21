@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { DEPARTMENT } from "@/config/brand";
-import type { SessionPayload } from "@/lib/auth";
 
 /**
  * =============================================================================
@@ -14,10 +13,10 @@ import type { SessionPayload } from "@/lib/auth";
  *      developer running without DATABASE_URL) into an empty result plus an
  *      error string, so the console renders a notice instead of a 500.
  *
- *   2. **Hiding the retired Institute** — BITSOL Institute's records were kept
- *      in the shared tables when it was retired. `OWN` and `OWN_OR_GLOBAL` are
- *      the `where` fragments that keep them out of every list, and `isOwn`
- *      guards pages and routes that load one record by id.
+ *   2. **Tenancy** — `OWN` is the `where` fragment every query spreads, and
+ *      `isOwn` guards pages and routes that load one record by id. Strict
+ *      equality on purpose: a NULL department marks a row this application
+ *      did not write, and it must never be shown or changed.
  * =============================================================================
  */
 
@@ -43,43 +42,12 @@ export async function safeQuery<T>(
   }
 }
 
-/** `where` fragment for tables whose `department` column is required. */
+/** `where` fragment that keeps every query inside this tenant. */
 export const OWN = { department: DEPARTMENT };
 
-/**
- * `where` fragment for tables whose `department` is nullable — a conversation
- * that never picked a business, a global setting, an unassigned template.
- *
- * The OR is deliberate: `department <> 'INSTITUTE'` would also drop every NULL
- * row, because a comparison with NULL is never true in SQL. Spread it under
- * `AND` when the same `where` needs an OR of its own.
- */
-export const OWN_OR_GLOBAL = { OR: [{ department: DEPARTMENT }, { department: null }] };
-
-/** True for a record this console may show; false for an archived Institute one. */
+/** True for a record this console may show and change. */
 export function isOwn(department: string | null | undefined): boolean {
-  return department == null || department === DEPARTMENT;
-}
-
-/** Granted permission keys, or null when the role has unrestricted access. */
-export async function loadPermissions(
-  session: SessionPayload
-): Promise<Set<string> | null> {
-  if (session.role === "SUPER_ADMIN" || session.role === "ADMIN") return null;
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: session.sub },
-      select: {
-        rbac: { select: { permissions: { select: { permission: { select: { key: true } } } } } },
-      },
-    });
-    const keys = user?.rbac?.permissions.map((p) => p.permission.key) ?? [];
-    // A staff account with no role assigned still needs the dashboard, or they
-    // sign in to a blank console with no way forward.
-    return new Set(keys.length ? keys : ["dashboard.view"]);
-  } catch {
-    return new Set(["dashboard.view"]);
-  }
+  return department === DEPARTMENT;
 }
 
 // --------------------------------------------------------------- Badges -----
@@ -96,7 +64,7 @@ export async function navCounts(): Promise<NavCounts> {
   const { data } = await safeQuery(async () => {
     const [openTickets, newLeads] = await Promise.all([
       prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] }, ...OWN } }),
-      prisma.lead.count({ where: { stage: "NEW" } }),
+      prisma.lead.count({ where: { stage: "NEW", ...OWN } }),
     ]);
     return { openTickets, newLeads };
   }, empty);
@@ -167,18 +135,18 @@ export async function dashboardStats(): Promise<QueryResult<DashboardStats>> {
       recentActivity,
     ] = await Promise.all([
       prisma.conversation.count({
-        where: { createdAt: { gte: startOfToday }, ...OWN_OR_GLOBAL },
+        where: { createdAt: { gte: startOfToday }, ...OWN },
       }),
-      prisma.conversation.count({ where: OWN_OR_GLOBAL }),
-      prisma.lead.count(),
-      prisma.lead.count({ where: { stage: "NEW" } }),
-      prisma.lead.count({ where: { stage: "WON" } }),
+      prisma.conversation.count({ where: OWN }),
+      prisma.lead.count({ where: OWN }),
+      prisma.lead.count({ where: { stage: "NEW", ...OWN } }),
+      prisma.lead.count({ where: { stage: "WON", ...OWN } }),
       prisma.lead.aggregate({
-        where: { stage: "WON" },
+        where: { stage: "WON", ...OWN },
         _sum: { estimatedValue: true },
       }),
       prisma.lead.aggregate({
-        where: { stage: { notIn: ["WON", "LOST"] } },
+        where: { stage: { notIn: ["WON", "LOST"] }, ...OWN },
         _sum: { estimatedValue: true },
       }),
       prisma.ticket.count({
@@ -195,18 +163,18 @@ export async function dashboardStats(): Promise<QueryResult<DashboardStats>> {
         where: { status: { in: ["DISCOVERY", "IN_PROGRESS", "REVIEW"] } },
       }),
       prisma.conversation.aggregate({
-        where: { rating: { not: null }, ...OWN_OR_GLOBAL },
+        where: { rating: { not: null }, ...OWN },
         _avg: { rating: true },
       }),
       prisma.lead.groupBy({
         by: ["serviceSlug"],
         _count: { _all: true },
-        where: { serviceSlug: { not: null } },
+        where: { serviceSlug: { not: null }, ...OWN },
         orderBy: { _count: { serviceSlug: "desc" } },
         take: 6,
       }),
       prisma.systemLog.findMany({
-        where: OWN_OR_GLOBAL,
+        where: OWN,
         orderBy: { createdAt: "desc" },
         take: 8,
         select: { id: true, action: true, message: true, createdAt: true },

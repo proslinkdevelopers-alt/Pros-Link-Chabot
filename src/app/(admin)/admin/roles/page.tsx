@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import { DbNotice, EmptyState, PageHeader, StatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui/card";
 
@@ -21,13 +21,13 @@ const RETIRED_PERMISSIONS = [
 ];
 
 export default async function RolesPage() {
-  await requireAdmin("/admin/roles");
+  await requirePagePermission("team.manage", "/admin/roles");
 
   const { data, error } = await safeQuery(
     async () => {
       const [roles, permissions] = await Promise.all([
         prisma.role.findMany({
-          where: OWN_OR_GLOBAL,
+          where: OWN,
           orderBy: { name: "asc" },
           include: {
             _count: { select: { users: true } },

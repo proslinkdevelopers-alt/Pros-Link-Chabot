@@ -1,5 +1,4 @@
-import { getSession } from "@/lib/session";
-import { canAccessAdmin } from "@/lib/auth";
+import { requireApiPermission } from "@/lib/staff";
 import { logEvent } from "@/lib/notify";
 import { config } from "@/lib/config";
 import { syncTemplates } from "@/lib/whatsapp/templates";
@@ -14,11 +13,10 @@ export const dynamic = "force-dynamic";
  * template. Nothing else updates `status`, so a broadcast composer that shows
  * no approved templates usually means nobody has synced since the review.
  */
-export async function POST() {
-  const session = await getSession();
-  if (!session || !canAccessAdmin(session)) {
-    return Response.json({ error: "Not authorised." }, { status: 401 });
-  }
+export async function POST(req: Request) {
+  const guard = await requireApiPermission("whatsapp.manage", req);
+  if ("response" in guard) return guard.response;
+  const session = { sub: guard.staff.id, name: guard.staff.name };
 
   if (!config.whatsapp.templatesEnabled) {
     return Response.json(

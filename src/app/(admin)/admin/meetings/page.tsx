@@ -1,6 +1,6 @@
 import type { MeetingStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   DataTable,
@@ -27,7 +27,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 export default async function MeetingsPage() {
-  await requireAdmin("/admin/meetings");
+  await requirePagePermission("appointments.view", "/admin/meetings");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 

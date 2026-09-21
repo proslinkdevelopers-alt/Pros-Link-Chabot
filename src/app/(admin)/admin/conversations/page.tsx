@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
-import { OWN_OR_GLOBAL, safeQuery } from "@/lib/admin/queries";
+import { requirePagePermission } from "@/lib/staff";
+import { OWN, safeQuery } from "@/lib/admin/queries";
 import {
   ChannelBadge,
   DataTable,
@@ -21,7 +21,7 @@ export default async function ConversationsPage({
 }: {
   searchParams: Promise<{ filter?: string }>;
 }) {
-  await requireAdmin("/admin/conversations");
+  await requirePagePermission("conversations.view", "/admin/conversations");
   const { filter } = await searchParams;
 
   const filters: Record<string, Prisma.ConversationWhereInput> = {
@@ -29,7 +29,7 @@ export default async function ConversationsPage({
     whatsapp: { channel: "WHATSAPP" },
     web: { channel: "WEB" },
   };
-  const where = { ...OWN_OR_GLOBAL, ...(filters[filter ?? ""] ?? {}) };
+  const where = { ...OWN, ...(filters[filter ?? ""] ?? {}) };
 
   const { data, error } = await safeQuery(
     async () => {
@@ -47,11 +47,11 @@ export default async function ConversationsPage({
             },
           },
         }),
-        prisma.conversation.count({ where: OWN_OR_GLOBAL }),
-        prisma.conversation.count({ where: { ...OWN_OR_GLOBAL, handedOff: true } }),
-        prisma.conversation.count({ where: { ...OWN_OR_GLOBAL, channel: "WHATSAPP" } }),
+        prisma.conversation.count({ where: OWN }),
+        prisma.conversation.count({ where: { ...OWN, handedOff: true } }),
+        prisma.conversation.count({ where: { ...OWN, channel: "WHATSAPP" } }),
         prisma.conversation.aggregate({
-          where: { ...OWN_OR_GLOBAL, rating: { not: null } },
+          where: { ...OWN, rating: { not: null } },
           _avg: { rating: true },
         }),
       ]);

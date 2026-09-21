@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import { DataTable, DbNotice, PageHeader, StatCard, StatusBadge } from "@/components/admin/ui";
 import { FileCheck2, ReceiptText, Send } from "lucide-react";
@@ -8,7 +8,7 @@ import { formatDate, formatPkr } from "@/lib/utils";
 export const metadata = { title: "Quotations" };
 
 export default async function QuotesPage() {
-  await requireAdmin("/admin/quotes");
+  await requirePagePermission("quotes.view", "/admin/quotes");
 
   const { data, error } = await safeQuery(
     async () => {

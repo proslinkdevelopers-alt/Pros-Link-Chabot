@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/session";
+import { requirePagePermission } from "@/lib/staff";
 import { safeQuery } from "@/lib/admin/queries";
 import { DataTable, DbNotice, PageHeader, StatusBadge } from "@/components/admin/ui";
 import { formatDate, formatPkr } from "@/lib/utils";
@@ -7,7 +7,7 @@ import { formatDate, formatPkr } from "@/lib/utils";
 export const metadata = { title: "Customers" };
 
 export default async function CustomersPage() {
-  await requireAdmin("/admin/crm/customers");
+  await requirePagePermission("customers.view", "/admin/crm/customers");
 
   const { data, error } = await safeQuery(
     () =>
