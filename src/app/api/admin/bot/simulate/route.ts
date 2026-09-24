@@ -4,7 +4,6 @@ import { requireApiPermission } from "@/lib/staff";
 import { asCustomerDetails } from "@/lib/ai/customer";
 import { detectLanguage, asLanguage, type Language } from "@/lib/i18n";
 import { getBotConfig } from "@/lib/bot/config";
-import { customerDetailsFrom, handoverBriefing, representativeReply, translateCopy } from "@/lib/bot/ai";
 import { runTurn, type BotRuntime, type Effect, type EffectResult } from "@/lib/bot/engine";
 import { stripRefCode } from "@/lib/bot/source";
 import { transcriptOf, type Outgoing } from "@/lib/bot/render";
@@ -18,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Chatbot Studio simulator — one turn of the real engine with the live
- * configuration, catalogue and model, as WhatsApp or the web assistant, but
+ * configuration and catalogue, as WhatsApp or the web assistant, but
  * nothing sent and nothing written to the CRM. The CRM effects the turn
  * *would* have had are returned so the tester can see what the team would
  * receive.
@@ -64,7 +63,6 @@ export async function POST(req: NextRequest) {
     body.input.kind === "text" && text.trim().split(/\s+/).length > 2 ? detectLanguage(text) : previous;
 
   const history = [...body.history, { role: "user" as const, content: text || "[tap]" }];
-  const ai = { config, company, categories, channel: body.channel, language, phone, profileName: body.profileName, history };
   const sent: Outgoing[] = [];
   const effects: Array<{ type: Effect["type"]; summary: string; detail?: unknown }> = [];
   let optedOut = body.optedOut;
@@ -129,7 +127,8 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  const tracker = createCrmRuntime({
+  // The real runtime's reading of the conversation; its writes are never used.
+  const crm = createCrmRuntime({
     channel: body.channel,
     conversationId: "simulator",
     phone,
@@ -137,7 +136,7 @@ export async function POST(req: NextRequest) {
     config,
     company,
     categories,
-    history: [],
+    history,
     now: new Date(),
     deliver: async () => ({ ok: true }),
   });
@@ -147,14 +146,12 @@ export async function POST(req: NextRequest) {
       sent.push(message);
       history.push({ role: "assistant", content: transcriptOf(message) });
     },
-    reply: (request) => representativeReply(ai, request),
-    extract: (known) => customerDetailsFrom(ai, known),
-    translate: (copy, target) => translateCopy(ai, copy, target),
-    summarize: () => handoverBriefing(ai),
+    extract: (known) => crm.extract(known),
+    summarize: () => crm.summarize(),
     products: (slug) => listProducts(slug),
     product: (id) => findProduct(id),
     // Tracking only reads; it looks up the real record with the simulated number.
-    track: (reference, number) => tracker.track(reference, number),
+    track: (reference, number) => crm.track(reference, number),
     commit,
   };
 

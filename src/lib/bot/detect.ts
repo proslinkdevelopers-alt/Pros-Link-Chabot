@@ -7,14 +7,12 @@ import { BOT_INTENTS, SERVICE_INTENTS, type BotIntent } from "./types";
  *  Deterministic detection
  * =============================================================================
  *
- *  Everything the router decides *before* a model is involved: which product
- *  or service a message is about, what the customer wants to happen, whether
- *  they are upset, want a person, want to stop receiving messages, or are
- *  describing a corporate or bulk requirement.
+ *  How the router reads a typed message: which product or service it is
+ *  about, what the customer wants to happen, whether they are upset, want a
+ *  person, want to stop receiving messages, or are describing a corporate or
+ *  bulk requirement.
  *
- *  Keyword work on purpose. It is instant, free, testable and predictable —
- *  the model still writes every open-ended reply, but it never decides whether
- *  a ticket gets opened.
+ *  Keyword work on purpose. It is instant, free, testable and predictable.
  *
  *  Keywords cover English, Roman Urdu and Urdu script, and administrators can
  *  add more per intent from Chatbot Studio.

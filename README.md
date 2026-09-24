@@ -53,8 +53,9 @@ Sign in at `/login` with the seeded Super Admin, then:
 5. **Knowledge Base** — review the starting entries and publish only what is
    accurate.
 
-Without an AI provider key the assistant still runs every menu, catalogue
-view and request form; open questions are handed to the team.
+The assistant works from its menus, catalogue views and request forms only.
+A typed message it cannot route brings back the main menu, and repeated ones
+offer a person.
 
 ## Scripts
 
@@ -102,7 +103,7 @@ src/
     catalog.ts              Starting categories and (unverified) brands
   lib/
     bot/                    Conversation engine, detection, scoring, runtimes
-    ai/                     Model providers, prompt, knowledge retrieval
+    ai/                     Customer details, knowledge retrieval
     whatsapp/               Cloud API client, webhook parsing, broadcasts
     admin/                  Console queries, labels, validation, metrics
     permissions.ts, staff.ts  Roles and server-side guards

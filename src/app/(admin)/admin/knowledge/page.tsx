@@ -25,7 +25,7 @@ export default async function KnowledgePage() {
       <PageHeader
         eyebrow="Assistant"
         title="Knowledge Base"
-        description="What the assistant is allowed to tell customers about Pros-Link: company, products, services, support, FAQ, policies, contact, sales and technical topics. It answers only from published entries."
+        description="Answers about Pros-Link — company, products, services, support, FAQ, policies, contact, sales and technical topics — served by the public knowledge search at /api/search. Only published entries are served."
       />
       <DbNotice error={error} />
       <div className="mb-6">

@@ -1,5 +1,4 @@
 import type { Language } from "@/lib/i18n";
-import { asksQuestion } from "@/lib/ai/intents";
 import { findReference, mergeDetails, type CustomerDetails, type CustomerIntent } from "@/lib/ai/customer";
 import { AVAILABILITY_LABEL, type CatalogProduct } from "@/lib/catalog-types";
 import {
@@ -20,7 +19,7 @@ import { offer, type Choice, type Outgoing } from "./render";
 import { scoreLead, warmedUp, type LeadScore } from "./scoring";
 import type { BotConfig } from "./schema";
 import { handoverSummary, machineLine, plainBrief, projectBrief, type HandoverSummary } from "./summary";
-import { fill, hasOwn, pick, wordCount, type TemplateValues } from "./text";
+import { fill, pick, wordCount, type TemplateValues } from "./text";
 import {
   SERVICE_LINE_INTENTS,
   isServiceIntent,
@@ -33,7 +32,6 @@ import {
   type FlowContext,
   type FlowId,
   type FlowStep,
-  type Localized,
   type ProofSection,
   type StepField,
   type SupportCategory,
@@ -48,7 +46,7 @@ import {
  *
  *  One customer message in, the replies and CRM effects out. The engine decides
  *  *what happens*; a `BotRuntime` does the I/O — sending to WhatsApp or back to
- *  the website, calling the model, reading the catalogue, writing the CRM.
+ *  the website, reading the catalogue, writing the CRM.
  *  Swapping the runtime is how the same engine runs on WhatsApp, on the web
  *  assistant, inside the console simulator and under tests with no network or
  *  database at all.
@@ -63,13 +61,14 @@ import {
  *    6. Upset, or asking for a person    — hand over with a full summary
  *    7. Corporate signals                — corporate mode
  *    8. An open flow                     — take the answer, ask the next thing
- *    9. Natural language                 — quote, service, tracking and callback
- *                                          requests start flows; everything else
- *                                          gets a representative's answer and the
- *                                          buttons that fit its intent
+ *    9. Typed requests                   — quote, service, tracking and callback
+ *                                          requests start flows, a product opens
+ *                                          its catalogue, a known intent gets its
+ *                                          buttons and anything else the main menu
  *
- *  Menus never trap anyone: free text works at every point, including in the
- *  middle of a flow, where a question is answered before the flow resumes.
+ *  The assistant answers with its menus, catalogue and flows only; it never
+ *  composes a reply. A message it cannot route leads back to the main menu,
+ *  and after a few in a row to a person.
  * =============================================================================
  */
 
@@ -128,17 +127,6 @@ export interface TurnContext {
   now: Date;
 }
 
-export interface ReplyRequest {
-  intent: BotIntent;
-  classification: Classification;
-  /** Explainers relevant to this message, authoritative for the answer. */
-  knowledge: Array<{ title: string; body: string }>;
-  /** A flow question still waiting on an answer — the reply must not ask anything else. */
-  pendingQuestion?: string;
-  details: CustomerDetails;
-  state: BotState;
-}
-
 export type TrackResult =
   | { found: false }
   | {
@@ -191,7 +179,7 @@ export type Effect =
       team: TeamKey;
       /** When the flow started, so media sent during it is attached. */
       since?: string;
-      /** A visit time the customer gave in words the extractor could not date. */
+      /** The visit time the customer asked for, in their own words. */
       note?: string;
       /** Also hand the conversation to the team. */
       handover?: HandoverSummary;
@@ -232,13 +220,9 @@ export interface EffectResult {
 
 export interface BotRuntime {
   send(message: Outgoing): Promise<void>;
-  /** The representative's answer, or "" when the model is unavailable. */
-  reply(request: ReplyRequest): Promise<string>;
-  /** Details the transcript — including the message being handled — adds to `known`. */
+  /** Contact details the transcript — including the message being handled — adds to `known`. */
   extract(known: CustomerDetails): Promise<CustomerDetails>;
-  /** Faithful translation of fixed copy; returns the input when unavailable. */
-  translate(text: string, language: Language): Promise<string>;
-  /** A few plain sentences summarising the conversation for a handover. */
+  /** What the customer said, briefly, for a handover. */
   summarize(): Promise<string>;
   /** Published products in a category. */
   products(categorySlug: string): Promise<CatalogProduct[]>;
@@ -256,9 +240,6 @@ export interface TurnResult {
 }
 
 // ---------------------------------------------------------------- Helpers ---
-
-const UNSURE_REPLY =
-  /(not sure|i don'?t have (that|this|enough) information|can'?t (answer|help with) that|connect you with (our|the) team|team (se|say) rabta|mujhe (is|iss) ka (ilm|pata) nahi)/i;
 
 /** Service lines and the flow and ticket category each opens. */
 const SERVICE_FLOW: Partial<Record<BotIntent, { flow: FlowId; category: SupportCategory; label: string }>> = {
@@ -279,6 +260,23 @@ const MACHINE_FOR_INTENT: Partial<Record<BotIntent, string>> = {
 
 const SAVE_FAILED = {
   en: "Sorry — something went wrong while saving your request, so it hasn't been submitted yet. Send any message to try again, or tap *Talk to a Person*.",
+};
+
+// Defaults for messages that a messages section saved before they existed lacks.
+const NOT_UNDERSTOOD = {
+  en: "Sorry, I didn't understand that. Please choose one of the options below.",
+  ur_roman: "Maazrat, main samajh nahi saka. Neeche diye gaye options mein se ek chunein.",
+  ur: "معذرت، میں سمجھ نہیں سکا۔ نیچے دیے گئے آپشنز میں سے ایک چنیں۔",
+};
+const INTENT_BUTTONS = {
+  en: "Here's how I can help — please choose an option below.",
+  ur_roman: "Main is tarah madad kar sakta hoon — neeche se ek option chunein.",
+  ur: "میں اس طرح مدد کر سکتا ہوں — نیچے سے ایک آپشن چنیں۔",
+};
+const QUESTION_LATER = {
+  en: "Our team will answer that when they get in touch. For now — {question}",
+  ur_roman: "Is ka jawab hamari team rabta karne par degi. Filhal — {question}",
+  ur: "اس کا جواب ہماری ٹیم رابطہ کرنے پر دے گی۔ فی الحال — {question}",
 };
 
 const NOT_SURE = "not-sure";
@@ -490,7 +488,7 @@ class Turn {
     }
   }
 
-  private async openNode(nodeId: string, pageNumber: number, options: { welcome?: boolean } = {}): Promise<void> {
+  private async openNode(nodeId: string, pageNumber: number, options: { welcome?: boolean; intro?: string } = {}): Promise<void> {
     const { config, language } = this;
     const node = config.menu.nodes[nodeId];
     if (!node) {
@@ -518,7 +516,7 @@ class Turn {
         children.push({ id: "a:main_menu", title: pick(config.messages.mainMenu, language), description: undefined });
       }
 
-      const body = options.welcome ? pick(config.messages.welcome, language) : pick(node.body, language);
+      const body = options.intro ?? (options.welcome ? pick(config.messages.welcome, language) : pick(node.body, language));
       await this.event("MENU_OPENED", { value: nodeId });
       await this.offer(this.fillCopy(body), children, {
         pageId: (next) => `n:${nodeId}:${next}`,
@@ -536,8 +534,7 @@ class Turn {
       this.remember(pick(node.title, "en"));
       await this.event("SERVICE_VIEWED", { value: nodeId, intent: node.intent, team: node.team });
 
-      const body = await this.localise(node.body);
-      await this.offer(this.fillCopy(body), this.actionChoices(node.actions), { footer: this.footer() });
+      await this.offer(this.fillCopy(pick(node.body, language)), this.actionChoices(node.actions), { footer: this.footer() });
       return;
     }
 
@@ -721,7 +718,7 @@ class Turn {
     );
   }
 
-  // ------------------------------------------------------ Natural language --
+  // -------------------------------------------------------- Typed requests --
 
   private async converse(text: string, classification: Classification): Promise<void> {
     const { config } = this;
@@ -730,6 +727,10 @@ class Turn {
     if (service) this.setIntent(service);
     if (classification.primary !== "GENERAL_INQUIRY") this.details.topic = classification.primary;
     const issue = wordCount(text) >= 4 ? text : undefined;
+
+    // Messages in a row that led nowhere; any that is routed starts the count again.
+    const misses = this.state.fallbacks;
+    this.state.fallbacks = 0;
 
     // Requests that have a flow of their own start it straight away.
     switch (request) {
@@ -763,54 +764,29 @@ class Turn {
       }
     }
 
-    const intent = service ?? request ?? this.state.intent ?? "GENERAL_INQUIRY";
-    const reply = await this.runtime.reply({
-      intent,
-      classification,
-      knowledge: this.knowledgeFor(intent),
-      details: this.details,
-      state: this.state,
-    });
+    // A price question: the prices the team has published, or the way to a quotation.
+    if (request === "PRICING") return this.showPricing(service ?? this.currentServiceIntent());
 
-    if (!reply.trim()) {
-      this.state.fallbacks += 1;
-      await this.event("FALLBACK", { intent });
-      await this.offer(pick(config.messages.busy, this.language), this.actionChoices(["talk_to_person", "main_menu"]));
+    // A product range in words opens that part of the catalogue.
+    const slug = service ? this.categoryForIntent(service) : undefined;
+    if (slug) return this.showCategory(slug, 0);
+
+    // Anything else understood gets the buttons configured for its intent.
+    const intent = service ?? request;
+    const actions = intent && intent !== "GENERAL_INQUIRY" ? (config.intents[intent]?.actions ?? []) : [];
+    if (actions.length) {
+      await this.offer(pick(config.messages.intentButtons ?? INTENT_BUTTONS, this.language), this.actionChoices(actions));
       return;
     }
 
-    this.state.fallbacks = UNSURE_REPLY.test(reply) ? this.state.fallbacks + 1 : 0;
-    await this.event("AI_REPLY", { intent });
-
-    if (this.state.fallbacks >= config.handover.lowConfidenceTurns) {
-      this.state.fallbacks = 0;
-      await this.say(reply);
+    // Not understood: back to the main menu — and a person once that has not helped.
+    await this.event("FALLBACK", { intent: intent ?? "GENERAL_INQUIRY" });
+    if (misses + 1 >= config.handover.lowConfidenceTurns) {
       await this.offer(pick(config.messages.lowConfidence, this.language), this.actionChoices(["talk_to_person", "main_menu"]));
       return;
     }
-
-    if (asksQuestion(reply)) {
-      await this.say(reply);
-      return;
-    }
-
-    const pricingActions =
-      request === "PRICING" ? config.pricing.find((entry) => entry.intents.includes(intent))?.actions : undefined;
-    const actions =
-      pricingActions ??
-      (request === "PRICING" ? ["get_quote", "request_callback", "talk_to_sales"] : undefined) ??
-      config.intents[intent]?.actions ??
-      config.intents.GENERAL_INQUIRY?.actions ??
-      [];
-    await this.offer(reply, this.actionChoices(actions));
-  }
-
-  /** The explainer for an intent, plus the product the customer has open. */
-  private knowledgeFor(intent: BotIntent): ReplyRequest["knowledge"] {
-    const nodeId = this.config.intents[intent]?.node;
-    const node = nodeId ? this.config.menu.nodes[nodeId] : undefined;
-    if (!node || node.kind !== "service") return [];
-    return [{ title: pick(node.title, "en"), body: this.fillCopy(node.body.en) }];
+    this.state.fallbacks = misses + 1;
+    await this.openNode(config.menu.root, 0, { intro: pick(config.messages.notUnderstood ?? NOT_UNDERSTOOD, this.language) });
   }
 
   // ---------------------------------------------------------------- Flows ---
@@ -887,7 +863,7 @@ class Turn {
     const d = this.details;
     switch (field) {
       case "visitSlot":
-        return Boolean((d.meetingDate && d.meetingTime) || active.meetingNote);
+        return Boolean(active.meetingNote);
       case "productCategory":
         return Boolean(d.productCategory || d.productId);
       case "phone":
@@ -1038,22 +1014,9 @@ class Turn {
       return this.askNext();
     }
 
-    // A question in the middle of a flow gets a real answer, then the flow resumes.
+    // A question in the middle of a flow is left for the team; the flow carries on.
     if (field !== "requirements" && (isQuestion(text) || (classification.request === "PRICING" && wordCount(text) > 2))) {
-      const intent = classification.service ?? this.state.intent ?? "GENERAL_INQUIRY";
-      const reply = await this.runtime.reply({
-        intent,
-        classification,
-        knowledge: this.knowledgeFor(intent),
-        pendingQuestion: pick(step.ask, "en"),
-        details: this.details,
-        state: this.state,
-      });
-      if (reply.trim()) {
-        await this.say(reply);
-        await this.event("AI_REPLY", { intent, value: `during:${active.id}` });
-      }
-      return this.askNext(pick(this.config.messages.resumeFlow, this.language));
+      return this.askNext(pick(this.config.messages.questionLater ?? QUESTION_LATER, this.language));
     }
 
     if (step.kind === "choice") {
@@ -1081,12 +1044,7 @@ class Turn {
 
     // Text questions.
     if (field === "visitSlot") {
-      active.retries += 1;
-      if (active.retries < 2) {
-        await this.say(pick(this.config.messages.meetingSlotRetry, this.language));
-        return;
-      }
-      // The extractor could not turn it into a date; keep their words for the team.
+      // Kept in the customer's words; the team confirms the actual time.
       active.meetingNote = text;
       return this.askNext();
     }
@@ -1599,13 +1557,6 @@ class Turn {
     })) {
       await this.runtime.send(message);
     }
-  }
-
-  /** Fixed copy in the customer's language — translated by the model when not written for it. */
-  private async localise(copy: Localized): Promise<string> {
-    if (hasOwn(copy, this.language)) return pick(copy, this.language);
-    const translated = await this.runtime.translate(copy.en, this.language).catch(() => "");
-    return translated.trim() || copy.en;
   }
 
   private fillCopy(template: string, extra: TemplateValues = {}): string {

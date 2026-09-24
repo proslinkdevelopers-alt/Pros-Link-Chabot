@@ -13,7 +13,7 @@ Business, a PM2 alternative, the go-live checklist and operations.
 - Redis — optional; recommended when running more than one instance
 - A domain with TLS (Let's Encrypt or the host's certificate)
 - For WhatsApp: a Meta app with the WhatsApp product and Pros-Link's business
-  number; for AI answers: a provider key (optional)
+  number
 
 ---
 
@@ -38,7 +38,6 @@ cp .env.example .env
   `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, and
   `WHATSAPP_BUSINESS_ACCOUNT_ID` for templates. (The short names
   `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_WABA_ID` also work.)
-- AI (optional): `AI_PROVIDER` and the matching key; `AI_MODEL` is optional.
 - `CRON_SECRET` to enable WhatsApp follow-ups.
 - `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` for the first Super Admin.
 - `REDIS_URL` if you run several instances (rate limits are otherwise

@@ -23,11 +23,6 @@ export const SECTION_INFO: Record<SectionKey, { title: string; group: string; de
     group: "Business",
     description: "Verified references, installations and reviews. Nothing reaches customers unless it is entered here.",
   },
-  personality: {
-    title: "Assistant personality",
-    group: "Conversation",
-    description: "The assistant's name, voice and standing instructions, added to every AI answer.",
-  },
   messages: {
     title: "Messages & welcome",
     group: "Conversation",

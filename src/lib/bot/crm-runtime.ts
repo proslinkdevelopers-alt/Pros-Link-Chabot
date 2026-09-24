@@ -9,11 +9,10 @@ import { syncCapture, type CaptureContext } from "@/lib/capture";
 import { linkCustomer, phoneTail } from "@/lib/customers";
 import { findProduct, listProducts } from "@/lib/catalog";
 import type { ChatTurn } from "@/lib/ai";
-import type { CustomerDetails } from "@/lib/ai/customer";
+import { extractCustomerDetails, type CustomerDetails } from "@/lib/ai/customer";
 import type { Permission } from "@/lib/permissions";
 import type { CapturedRecord } from "@/types";
-import type { BotRuntime, CompanyContact, Effect, EffectResult, ReplyRequest, TrackResult } from "./engine";
-import { customerDetailsFrom, handoverBriefing, representativeReply, translateCopy, type AiContext } from "./ai";
+import type { BotRuntime, CompanyContact, Effect, EffectResult, TrackResult } from "./engine";
 import { teamRecipients } from "./prompt";
 import { transcriptOf, type Outgoing } from "./render";
 import type { LeadScore } from "./scoring";
@@ -27,10 +26,10 @@ import type { SupportCategory, TeamKey, Temperature } from "./types";
  * =============================================================================
  *
  *  Everything the conversation engine asks for, done for real: messages go out
- *  through the channel's `deliver` and into the transcript, the model answers,
- *  the catalogue is read, and CRM effects become leads, quote requests,
- *  service tickets, appointments, handovers and notifications for the right
- *  team — identically for WhatsApp and the web assistant.
+ *  through the channel's `deliver` and into the transcript, the catalogue is
+ *  read, and CRM effects become leads, quote requests, service tickets,
+ *  appointments, handovers and notifications for the right team — identically
+ *  for WhatsApp and the web assistant.
  *
  *  Nothing here throws. A failed CRM write is logged and the conversation
  *  carries on — the customer must still get a reply.
@@ -202,22 +201,22 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
     });
   }
 
-  // ------------------------------------------------------------------ AI ---
+  // -------------------------------------------------------- Understanding ---
 
-  const ai: AiContext = {
-    config,
-    company: ctx.company,
-    categories: ctx.categories,
-    channel: ctx.channel,
-    language: ctx.language,
-    phone: ctx.phone,
-    profileName: ctx.profileName,
-    history: ctx.history,
-  };
-  const reply = (request: ReplyRequest) => representativeReply(ai, request);
-  const extract = (known: CustomerDetails) => customerDetailsFrom(ai, known);
-  const translate = (text: string, language: Language) => translateCopy(ai, text, language);
-  const summarize = () => handoverBriefing(ai);
+  /** Phone numbers, emails and references the customer typed. */
+  const extract = async (known: CustomerDetails) =>
+    extractCustomerDetails(ctx.history, known, {
+      brandPhones: [ctx.company.phone, ctx.company.whatsapp, ...ctx.company.offices.map((office) => office.phone)].filter(Boolean),
+      brandEmail: ctx.company.email,
+    });
+
+  /** The customer's last few messages, for the person taking over. */
+  const summarize = async () =>
+    ctx.history
+      .filter((turn) => turn.role === "user")
+      .slice(-4)
+      .map((turn) => `“${truncate(turn.content, 200)}”`)
+      .join(" · ");
 
   // ------------------------------------------------------------ Catalogue ---
 
@@ -787,5 +786,5 @@ export function createCrmRuntime(ctx: CrmRuntimeContext): CrmRuntime {
     }
   }
 
-  return { send, reply, extract, translate, summarize, products, product, track, commit, records, created };
+  return { send, extract, summarize, products, product, track, commit, records, created };
 }

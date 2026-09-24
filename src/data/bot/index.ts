@@ -1,5 +1,5 @@
 import type { BotConfig } from "@/lib/bot/schema";
-import { DEFAULT_BUSINESS_HOURS, DEFAULT_MESSAGES, DEFAULT_PERSONALITY } from "./copy";
+import { DEFAULT_BUSINESS_HOURS, DEFAULT_MESSAGES } from "./copy";
 import { DEFAULT_FLOWS, DEFAULT_OPTIONS } from "./flows";
 import { DEFAULT_ACTIONS, DEFAULT_MENU } from "./menu";
 import {
@@ -22,7 +22,6 @@ import {
  */
 export const DEFAULT_BOT_CONFIG: BotConfig = {
   businessHours: DEFAULT_BUSINESS_HOURS,
-  personality: DEFAULT_PERSONALITY,
   messages: DEFAULT_MESSAGES,
   menu: DEFAULT_MENU,
   actions: DEFAULT_ACTIONS,

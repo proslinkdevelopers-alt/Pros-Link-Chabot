@@ -4,6 +4,7 @@ import {
   CalendarCheck,
   Flame,
   Headset,
+  HelpCircle,
   MessagesSquare,
   Percent,
   PhoneForwarded,
@@ -32,7 +33,7 @@ const VIEWS = {
   sales: "Sales",
   marketing: "Marketing",
   support: "Support",
-  ai: "AI & Automation",
+  ai: "Automation",
   admin: "Admin",
 } as const;
 
@@ -200,7 +201,7 @@ function Support({ data }: { data: ChatbotAnalytics }) {
         <StatCard label="Support tickets" value={data.tickets} icon={Headset} href="/admin/support" />
         <StatCard label="Handovers" value={data.handovers} icon={PhoneForwarded} href="/admin/conversations" />
         <StatCard label="Avg response time" value={data.responseSeconds == null ? "—" : formatSeconds(data.responseSeconds)} hint="Customer message → next reply" icon={Timer} />
-        <StatCard label="Resolved by the assistant" value={pct(data.aiResolutionRate)} hint="Conversations never handed over" icon={Bot} />
+        <StatCard label="Resolved by the assistant" value={pct(data.selfServiceRate)} hint="Conversations never handed over" icon={Bot} />
       </Tiles>
       <Grid>
         <Breakdown title="Handovers by team" rows={data.handoversByTeam} labels={teamLabel} />
@@ -216,8 +217,8 @@ function Automation({ data }: { data: ChatbotAnalytics }) {
   return (
     <>
       <Tiles>
-        <StatCard label="AI resolution rate" value={pct(data.aiResolutionRate)} hint="Conversations never handed over" icon={Bot} />
-        <StatCard label="AI answers" value={data.aiReplies} hint={`${data.fallbacks} could not be answered`} icon={Sparkles} />
+        <StatCard label="Self-service rate" value={pct(data.selfServiceRate)} hint="Conversations never handed over" icon={Bot} />
+        <StatCard label="Not understood" value={data.fallbacks} hint="Typed messages sent back to the menu" icon={HelpCircle} />
         <StatCard label="Flow completion" value={pct(completion)} hint={`${data.flowsCompleted} of ${data.flowsStarted} flows`} icon={Percent} />
         <StatCard label="Follow-ups sent" value={data.followUpsSent} hint={`${data.optOuts} opt-outs`} icon={Send} />
       </Tiles>

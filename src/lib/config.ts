@@ -47,42 +47,6 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   BCRYPT_ROUNDS: z.coerce.number().int().min(8).max(15).default(12),
 
-  AI_PROVIDER: z.enum(["claude", "openai", "ollama", "gemini"]).default("claude"),
-  /** Model id for the selected provider. Unset means that provider's default below. */
-  AI_MODEL: optional,
-  /**
-   * Model that reads each conversation for the customer's details. Defaults to
-   * AI_MODEL; a smaller model from the same provider is cheaper and plenty.
-   */
-  AI_EXTRACTION_MODEL: optional,
-  AI_MAX_TOKENS: z.coerce.number().int().positive().default(1400),
-  AI_THINKING: bool(false),
-
-  ANTHROPIC_API_KEY: optional,
-  /**
-   * Where Claude requests go. Unset means Anthropic's own API. For Claude
-   * Platform on AWS it is the regional endpoint,
-   * `https://aws-external-anthropic.<region>.api.aws`, and the API key is one
-   * generated in the AWS console.
-   */
-  ANTHROPIC_BASE_URL: optional,
-  /** Claude Platform on AWS workspace (`wrkspc_…`) — required there, unused elsewhere. */
-  ANTHROPIC_WORKSPACE_ID: optional,
-  OPENAI_API_KEY: optional,
-  OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
-  GEMINI_API_KEY: optional,
-  /**
-   * How much a Gemini model thinks before answering: `off` (a zero budget —
-   * Gemini 2.5 Flash and Flash-Lite), or `minimal` / `low` / `medium` / `high`
-   * (Gemini 3). Unset leaves the model's own default. Thought tokens count
-   * against AI_MAX_TOKENS, so a model that thinks at length on a chat reply can
-   * run out of room for the reply itself.
-   */
-  GEMINI_THINKING: z.preprocess(
-    (value) => (typeof value === "string" && value.trim() ? value.trim().toLowerCase() : undefined),
-    z.enum(["off", "minimal", "low", "medium", "high"]).optional()
-  ),
-
   // --- Notification & integration channels ---------------------------------
   SMTP_HOST: optional,
   SMTP_PORT: z.coerce.number().int().positive().default(587),
@@ -195,16 +159,6 @@ function durationSeconds(value: string): number {
   return Number(match[1]) * unit;
 }
 
-/** The model used when AI_MODEL is unset — one that exists on each provider. */
-const DEFAULT_MODEL: Record<typeof env.AI_PROVIDER, string> = {
-  claude: "claude-opus-4-8",
-  openai: "gpt-4o-mini",
-  ollama: "llama3.1",
-  gemini: "gemini-3.1-flash-lite",
-};
-
-const model = env.AI_MODEL || DEFAULT_MODEL[env.AI_PROVIDER];
-
 export const config = {
   env: env.NODE_ENV,
   isProd: env.NODE_ENV === "production",
@@ -220,21 +174,6 @@ export const config = {
     maxAgeSeconds: durationSeconds(env.JWT_EXPIRES_IN),
   },
   bcryptRounds: env.BCRYPT_ROUNDS,
-
-  ai: {
-    provider: env.AI_PROVIDER,
-    model,
-    extractionModel: env.AI_EXTRACTION_MODEL || model,
-    maxTokens: env.AI_MAX_TOKENS,
-    thinking: env.AI_THINKING,
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
-    anthropicBaseUrl: env.ANTHROPIC_BASE_URL?.replace(/\/+$/, "") || undefined,
-    anthropicWorkspaceId: env.ANTHROPIC_WORKSPACE_ID,
-    openaiApiKey: env.OPENAI_API_KEY,
-    openaiBaseUrl: env.OPENAI_BASE_URL,
-    geminiApiKey: env.GEMINI_API_KEY,
-    geminiThinking: env.GEMINI_THINKING,
-  },
 
   mail: {
     host: env.SMTP_HOST,

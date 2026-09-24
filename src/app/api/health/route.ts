@@ -36,8 +36,6 @@ export async function GET() {
   return Response.json(
     {
       status: healthy ? "healthy" : "degraded",
-      provider: config.ai.provider,
-      model: config.ai.model,
       checks,
       timestamp: new Date().toISOString(),
     },

@@ -12,7 +12,6 @@ import {
   type InboundMedia,
   type InboundTurn,
   type Records,
-  type ReplyRequest,
   type TrackResult,
 } from "../engine";
 import { transcriptOf, type Outgoing } from "../render";
@@ -44,8 +43,8 @@ export const FIXTURE_PRODUCT: CatalogProduct = {
 export const KNOWN_REQUEST = { reference: "PL-TKT-7F3K2Q9A", phoneTail: "3001234567" };
 
 /**
- * A conversation with the engine and nothing else: no WhatsApp, no database,
- * no model. Replies, extraction and CRM writes are recorded so a test can
+ * A conversation with the engine and nothing else: no WhatsApp and no
+ * database. Messages, extraction and CRM writes are recorded so a test can
  * assert on exactly what the customer saw and what the team would receive.
  */
 export class TestConversation {
@@ -54,14 +53,11 @@ export class TestConversation {
   records: Records = {};
   effects: Effect[] = [];
   sent: Outgoing[] = [];
-  replies: ReplyRequest[] = [];
   optedOut = false;
   botPaused = false;
   turns = 0;
   now = new Date("2026-09-14T08:00:00Z"); // Monday 13:00 in Pakistan
 
-  /** What the fake model answers. */
-  aiReply: (request: ReplyRequest) => string = () => "Happy to help with that.";
   /** What the fake extractor reads out of the latest message. */
   extractor: (text: string, known: CustomerDetails) => CustomerDetails = () => ({});
   /** CRM writes that fail, as when the database is unavailable. */
@@ -98,12 +94,7 @@ export class TestConversation {
         outbox.push(message);
         this.sent.push(message);
       },
-      reply: async (request) => {
-        this.replies.push(request);
-        return this.aiReply(request);
-      },
       extract: async (known) => this.extractor(this.lastText, known),
-      translate: async (text, language) => `[${language}] ${text}`,
       summarize: async () => "Customer discussed their requirements.",
       products: async (slug) => this.catalog[slug] ?? [],
       product: async (id) => Object.values(this.catalog).flat().find((product) => product.id === id) ?? null,

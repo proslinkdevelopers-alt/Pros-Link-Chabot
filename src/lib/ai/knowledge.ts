@@ -6,12 +6,12 @@ import { DEFAULT_KNOWLEDGE } from "@/data/knowledge";
  *  Knowledge retrieval
  * =============================================================================
  *
- *  The assistant answers from the knowledge base first. Entries are edited in
- *  Admin → Knowledge and read from the database here — published ones only —
- *  so an edit reaches the next answer without a deploy. They are cached for a
- *  short while and the cache is dropped when someone saves an entry. When the
- *  database cannot be reached, the seed content in `src/data/knowledge` stands
- *  in, so the assistant keeps answering during an outage.
+ *  The knowledge base behind the public search at `/api/search`. Entries are
+ *  edited in Admin → Knowledge and read from the database here — published
+ *  ones only — so an edit reaches the next search without a deploy. They are
+ *  cached for a short while and the cache is dropped when someone saves an
+ *  entry. When the database cannot be reached, the seed content in
+ *  `src/data/knowledge` stands in, so search keeps working during an outage.
  *
  *  Scoring is light keyword overlap — dependency-free by design. Swapping in
  *  vector search later means changing only `retrieveKnowledge`.

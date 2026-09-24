@@ -96,7 +96,6 @@ describe("catalogue", () => {
     const out = await chat.send("Show me your photocopier catalogue");
     assert.match(textOf(out), /Photocopiers \/ MFPs/);
     assert.equal(chat.details.productCategory, "photocopiers-mfps");
-    assert.equal(chat.replies.length, 0);
   });
 
   it("shows the categories when asked what is sold", async () => {
@@ -106,25 +105,21 @@ describe("catalogue", () => {
   });
 });
 
-describe("natural language", () => {
-  it("answers a product question with the model and product next steps", async () => {
+describe("typed messages", () => {
+  it("opens the catalogue for a product asked about in words", async () => {
     const chat = new TestConversation();
-    chat.aiReply = () => "Yes, we supply digital duplicators. Our sales team can recommend a model for your volume.";
     const out = await chat.send("Do you have digital duplicators for a school?");
 
-    assert.equal(chat.replies[0].intent, "DIGITAL_DUPLICATOR");
     assert.equal(chat.details.productCategory, "digital-duplicators");
     assert.equal(chat.details.businessType, "Education");
-    assert.match(textOf(out), /digital duplicators/);
-    assert.deepEqual(ids(out), ["a:get_quote", "a:request_callback", "a:talk_to_sales"]);
+    assert.match(textOf(out), /Fixture Duplicator/);
+    assert.deepEqual(ids(out), ["pr:prod_fixture", "a:get_quote"]);
   });
 
   it("never states a price itself and steers price questions to a quotation", async () => {
     const chat = new TestConversation();
-    chat.aiReply = () => "Prices depend on the model and quantity, so our team prepares a quotation.";
     const out = await chat.send("What is the price of a photocopier?");
-    assert.equal(chat.replies[0].intent, "PHOTOCOPIER");
-    assert.equal(chat.replies[0].classification.request, "PRICING");
+    assert.match(textOf(out), /our team prepares a quotation for Photocopier/);
     assert.deepEqual(ids(out), ["a:get_quote", "a:request_callback", "a:talk_to_sales"]);
   });
 
@@ -148,28 +143,35 @@ describe("natural language", () => {
     assert.match(textOf(out), /Fixture price published by the team/);
   });
 
-  it("holds back buttons when the reply is waiting on an answer", async () => {
+  it("offers the buttons for an intent it recognises", async () => {
     const chat = new TestConversation();
-    chat.aiReply = () => "Happy to help. How many pages do you print each month?";
-    const out = await chat.send("I want a printer for my office");
-    assert.equal(out.length, 1);
-    assert.equal(out[0].type, "text");
+    const out = await chat.send("I want to become a dealer partner");
+    assert.match(textOf(out), /Here's how I can help/);
+    assert.deepEqual(ids(out), ["a:talk_to_sales", "a:request_callback", "a:main_menu"]);
   });
 
-  it("offers the main menu when the model is unavailable", async () => {
+  it("brings a message it cannot route back to the main menu", async () => {
     const chat = new TestConversation();
-    chat.aiReply = () => "";
     const out = await chat.send("Tell me about your company");
-    assert.match(textOf(out), /having trouble replying/);
+    assert.match(textOf(out), /didn't understand that/);
+    assert.ok(ids(out).includes("n:products"));
+    assert.ok(chat.events().includes("FALLBACK"));
+  });
+
+  it("offers a person after repeated messages it could not route", async () => {
+    const chat = new TestConversation();
+    await chat.send("Tell me about your company");
+    const out = await chat.send("What about the weather?");
+    assert.match(textOf(out), /bring in someone from our team/);
     assert.deepEqual(ids(out), ["a:talk_to_person", "a:main_menu"]);
   });
 
-  it("offers a person after repeated answers the assistant was unsure of", async () => {
+  it("starts counting again once a message is routed", async () => {
     const chat = new TestConversation();
-    chat.aiReply = () => "I'm not sure about that — I can connect you with our team.";
-    await chat.send("Do you stock parts for a 1998 copier model?");
-    const out = await chat.send("What about the fuser for it?");
-    assert.match(textOf(out), /bring in someone from our team/);
+    await chat.send("Tell me about your company");
+    await chat.send("What do you sell?");
+    const out = await chat.send("What about the weather?");
+    assert.match(textOf(out), /didn't understand that/);
   });
 
   it("starts a service request in Roman Urdu", async () => {
@@ -264,17 +266,16 @@ describe("quote flow", () => {
     assert.doesNotMatch(asked, /phone number/i);
   });
 
-  it("answers a question in the middle of a flow and then resumes it", async () => {
+  it("leaves a question in the middle of a flow for the team and carries on", async () => {
     const chat = new TestConversation({ channel: "WEB" });
     await chat.tap("n:quote");
     await chat.tap("c:productCategory:0");
     await chat.send("For printing exam papers");
-    chat.aiReply = () => "Yes, we deliver across Pakistan.";
     const out = await chat.send("Do you deliver to Quetta?");
-    assert.match(chat.replies.at(-1)?.pendingQuestion ?? "", /How many/);
-    assert.match(textOf(out), /deliver across Pakistan/);
-    assert.match(textOf(out), /Coming back to where we were/);
+    assert.match(textOf(out), /Our team will answer that/);
+    assert.match(textOf(out), /How many/);
     assert.equal(chat.state.flow?.pending, "quantity");
+    assert.equal(chat.details.quantity, undefined);
   });
 });
 
@@ -423,7 +424,6 @@ describe("people and corporate customers", () => {
   it("hands an upset customer to a person instead of answering", async () => {
     const chat = new TestConversation();
     await chat.send("This is useless, worst service ever");
-    assert.equal(chat.replies.length, 0);
     assert.equal(chat.effectsOf("handover").length, 1);
   });
 

@@ -13,9 +13,6 @@ export interface IntegrationStatus {
  * present is reported; no value ever leaves the server.
  */
 export function integrationStatus(): IntegrationStatus[] {
-  const ai = config.ai;
-  const aiKey =
-    ai.provider === "claude" ? ai.anthropicApiKey : ai.provider === "openai" ? ai.openaiApiKey : ai.provider === "gemini" ? ai.geminiApiKey : ai.openaiBaseUrl;
   return [
     {
       name: "WhatsApp Cloud API — sending",
@@ -34,12 +31,6 @@ export function integrationStatus(): IntegrationStatus[] {
       state: config.whatsapp.templatesEnabled ? "ready" : "optional",
       detail: config.whatsapp.templatesEnabled ? "Templates can be synced and submitted for approval." : "Set the business account ID to manage templates from the console.",
       env: ["WHATSAPP_BUSINESS_ACCOUNT_ID"],
-    },
-    {
-      name: `AI replies (${ai.provider})`,
-      state: aiKey ? "ready" : "missing",
-      detail: aiKey ? `Model ${ai.model}.` : "Without a model the assistant still runs every menu and form, and hands open questions to the team.",
-      env: ["AI_PROVIDER", "AI_MODEL", ai.provider === "claude" ? "ANTHROPIC_API_KEY" : ai.provider === "gemini" ? "GEMINI_API_KEY" : ai.provider === "openai" ? "OPENAI_API_KEY" : "OPENAI_BASE_URL"],
     },
     {
       name: "Email notifications",

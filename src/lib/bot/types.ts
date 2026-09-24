@@ -149,7 +149,6 @@ export const BOT_EVENT_TYPES = [
   "FOLLOW_UP_SENT",
   "OPTED_OUT",
   "OPTED_IN",
-  "AI_REPLY",
   "FALLBACK",
 ] as const;
 
@@ -161,7 +160,7 @@ export type BotEventType = (typeof BOT_EVENT_TYPES)[number];
  * Profile fields a flow question can fill. Each is a key of `CustomerDetails`
  * (`lib/ai/customer.ts`), with these handled specially:
  *
- *  - `visitSlot` is answered when both `meetingDate` and `meetingTime` are known,
+ *  - `visitSlot` is answered in the customer's own words, for the team to confirm,
  *  - `name` is offered as a one-tap confirmation when WhatsApp supplied a profile name,
  *  - `phone` and `whatsapp` are known on WhatsApp from the number itself,
  *  - `attachment` is answered by a photo or document on WhatsApp and skipped on the web.

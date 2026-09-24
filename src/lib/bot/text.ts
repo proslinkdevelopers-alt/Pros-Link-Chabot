@@ -24,13 +24,6 @@ export function pick(copy: Localized | undefined, language: Language): string {
   return copy.en;
 }
 
-/** True when `copy` has its own text for `language`, not a fallback. */
-export function hasOwn(copy: Localized, language: Language): boolean {
-  if (language === "en") return true;
-  const value = copy[language as keyof Localized];
-  return Boolean(value && value.trim());
-}
-
 export type TemplateValues = Record<string, string | number | null | undefined>;
 
 /**

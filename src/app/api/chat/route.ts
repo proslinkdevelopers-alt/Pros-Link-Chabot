@@ -51,7 +51,7 @@ const FROM_PRISMA: Record<PrismaLanguage, Language> = { EN: "en", UR: "ur", UR_R
 
 export async function POST(req: NextRequest) {
   // A visitor sends one message at a time; this is generous for people and
-  // tight enough that nobody can run up the model bill.
+  // tight enough to keep scripts from flooding the CRM.
   const { allowed } = await rateLimit(`chat:${clientIpOf(req) ?? "anonymous"}`, 30, 60);
   if (!allowed) {
     return Response.json({ error: "Too many messages. Please wait a moment and try again." }, { status: 429 });
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** The last turns of the thread, in the shape the AI layer expects. */
+/** The last turns of the thread, in the shape the runtime expects. */
 async function loadHistory(conversationId: string): Promise<ChatTurn[]> {
   const rows = await prisma.message.findMany({
     where: { conversationId, role: { in: ["USER", "ASSISTANT"] } },

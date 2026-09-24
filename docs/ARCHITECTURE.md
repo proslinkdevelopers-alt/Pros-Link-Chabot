@@ -14,7 +14,7 @@ PostgreSQL through Prisma. Redis is optional (shared rate limits).
                 │                          CRM runtime (lib/bot/crm-runtime)│──▶ PostgreSQL
  Staff ────────▶│ /admin/*  ──▶ /api/admin/*  (permission-checked, audited) │
                 │ /api/cron/follow-ups  (scheduled WhatsApp follow-ups)     │──▶ Meta Graph API
-                └───────────────────────────────────────────────────────────┘──▶ AI provider (optional)
+                └───────────────────────────────────────────────────────────┘
 ```
 
 ## 1. Brand and tenancy
@@ -52,9 +52,9 @@ The same engine runs on:
 Order of precedence for a message: opt-out/opt-in (WhatsApp) → staff handling
 the thread → photos and documents → button/list taps → "menu" and greetings →
 frustration or a request for a person (handover) → corporate signals →
-the open flow → natural language (quote, service, tracking and callback
-requests start flows; everything else gets a model answer with next-step
-buttons).
+the open flow → typed requests (quote, service, tracking and callback
+requests start flows; a product opens its catalogue, a recognised intent gets
+its buttons and anything else the main menu).
 
 Everything the assistant says and asks — menus, flows, wording in English /
 Roman Urdu / Urdu, intents, teams, scoring, follow-ups — is configuration
@@ -63,8 +63,8 @@ Roman Urdu / Urdu, intents, teams, scoring, follow-ups — is configuration
 validates is ignored with a warning, never crashing the assistant.
 
 Deterministic keyword detection (`lib/bot/detect.ts`) decides what a message is
-about and whether a ticket or quote is opened; the model only writes open
-answers. Without a model, those answers fall back to a handover offer.
+about and whether a ticket or quote is opened. There is no language model: the
+assistant only ever sends configured menus, flows and messages.
 
 **Honesty rules enforced in code:** contact details only from the company
 profile; products, specifications and availability only from published

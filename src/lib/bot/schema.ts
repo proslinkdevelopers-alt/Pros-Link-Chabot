@@ -165,14 +165,6 @@ export const sectionSchemas = {
     })
     .nullable(),
 
-  personality: z.object({
-    assistantName: text,
-    /** A few sentences on voice, added to the representative's instructions. */
-    tone: z.string(),
-    /** Anything else the representative must always do or never do. */
-    instructions: z.string(),
-  }),
-
   messages: z.object({
     welcome: localized,
     menuButton: localized,
@@ -184,13 +176,11 @@ export const sectionSchemas = {
     optIn: localized,
     media: localized,
     mediaAttached: localized,
-    busy: localized,
     nameConfirm: localized,
     nameConfirmYes: localized,
     nameConfirmOther: localized,
     askAgain: localized,
     resumeFlow: localized,
-    meetingSlotRetry: localized,
     handover: localized,
     handoverOffHours: localized,
     handoverExisting: localized,
@@ -209,8 +199,14 @@ export const sectionSchemas = {
     contactMissing: localized,
     trackFound: localized,
     trackNotFound: localized,
-    /** Optional so a messages section saved before it existed still validates. */
+    /** Optional so a messages section saved before they existed still validates. */
     saveFailed: localized.optional(),
+    /** A typed message that matched nothing, above the main menu. */
+    notUnderstood: localized.optional(),
+    /** Above the buttons for a typed message whose intent was recognised. */
+    intentButtons: localized.optional(),
+    /** A question asked in the middle of a flow, before the flow's next question. */
+    questionLater: localized.optional(),
   }),
 
   menu: z.object({
@@ -303,7 +299,7 @@ export const sectionSchemas = {
   handover: z.object({
     /** Stay silent on a thread after it is handed to a person. */
     pauseBot: z.boolean(),
-    /** Offer a person after this many turns the assistant could not answer. */
+    /** Offer a person after this many typed messages in a row the assistant could not route. */
     lowConfidenceTurns: z.number().int().min(1).max(10),
     /** Tell the team, with a full summary, when a lead reaches these bands. */
     notifyTemperatures: z.array(z.enum(TEMPERATURES)),

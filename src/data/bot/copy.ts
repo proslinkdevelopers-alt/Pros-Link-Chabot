@@ -1,9 +1,8 @@
-import { BRAND } from "@/config/brand";
 import type { BotConfig } from "@/lib/bot/schema";
 
 /**
  * =============================================================================
- *  Pros-Link Assistant — voice and fixed messages
+ *  Pros-Link Assistant — fixed messages
  * =============================================================================
  *
  *  Defaults only. Every value here can be changed from Admin → Chatbot Studio,
@@ -26,19 +25,6 @@ import type { BotConfig } from "@/lib/bot/schema";
  * switch on the "back at…" message and business-hours follow-ups.
  */
 export const DEFAULT_BUSINESS_HOURS: BotConfig["businessHours"] = null;
-
-export const DEFAULT_PERSONALITY: BotConfig["personality"] = {
-  assistantName: BRAND.assistant.name,
-  tone:
-    "Professional, courteous and efficient — a knowledgeable office-equipment adviser for businesses, not a menu bot. Clear and concise, practical about machines and service, warm without being casual. Use an emoji only where it helps a message scan.",
-  instructions: [
-    "Recommend only products that appear in the catalogue you were given, with only the specifications written there.",
-    "Never state a price, stock level, delivery date, visit time or warranty term that you were not given. The team confirms these.",
-    "Never name a brand the team has not confirmed.",
-    "For repairs and service, collect the machine type, brand, model, serial number and the problem, then let the service flow log the ticket.",
-    "When unsure, say so and offer to bring in the team rather than guessing.",
-  ].join("\n"),
-};
 
 export const DEFAULT_MESSAGES: BotConfig["messages"] = {
   welcome: {
@@ -78,12 +64,6 @@ export const DEFAULT_MESSAGES: BotConfig["messages"] = {
     ur_roman: "📎 Mil gaya — maine ye hamari team ke liye attach kar diya hai.",
     ur: "📎 مل گیا — میں نے یہ ہماری ٹیم کے لیے منسلک کر دیا ہے۔",
   },
-  busy: {
-    en: "Sorry, I'm having trouble replying right now. Please try again in a moment — or tap *Talk to a Person* and our team will pick this up.",
-    ur_roman:
-      "Maazrat, abhi reply karne mein dikkat ho rahi hai. Thori der baad dobara koshish karein — ya *Talk to a Person* chunein, hamari team sambhal legi.",
-    ur: "معذرت، ابھی جواب دینے میں دشواری ہو رہی ہے۔ تھوڑی دیر بعد دوبارہ کوشش کریں — یا *Talk to a Person* چنیں، ہماری ٹیم سنبھال لے گی۔",
-  },
   nameConfirm: {
     en: "Shall I note your name as *{name}*?",
     ur_roman: "Kya main aap ka naam *{name}* likh loon?",
@@ -100,11 +80,6 @@ export const DEFAULT_MESSAGES: BotConfig["messages"] = {
     en: "Coming back to where we were — {question}",
     ur_roman: "Ab wahin se aage barhte hain — {question}",
     ur: "اب وہیں سے آگے بڑھتے ہیں — {question}",
-  },
-  meetingSlotRetry: {
-    en: "Could you give me a day and a time? For example *tomorrow at 11am* or *Monday afternoon*.",
-    ur_roman: "Koi din aur waqt bata dein? Maslan *kal 11 baje* ya *Monday dopahar*.",
-    ur: "کوئی دن اور وقت بتا دیں؟ مثلاً *کل گیارہ بجے* یا *پیر دوپہر*۔",
   },
   handover: {
     en: "👤 I've passed your conversation to our *{team}* team with everything you've shared, so you won't need to repeat yourself.[[\n\nReference: *{reference}*]]\nThey'll reply right here.",
@@ -207,5 +182,20 @@ export const DEFAULT_MESSAGES: BotConfig["messages"] = {
     ur_roman:
       "Maazrat — aap ki request save karte hue masla aa gaya, is liye abhi submit nahi hui. Dobara koshish ke liye koi bhi message bhejein, ya *Talk to a Person* dabayein.",
     ur: "معذرت — آپ کی درخواست محفوظ کرتے ہوئے مسئلہ پیش آیا، اس لیے ابھی جمع نہیں ہوئی۔ دوبارہ کوشش کے لیے کوئی بھی پیغام بھیجیں، یا *Talk to a Person* دبائیں۔",
+  },
+  notUnderstood: {
+    en: "Sorry, I didn't understand that. Please choose one of the options below.",
+    ur_roman: "Maazrat, main samajh nahi saka. Neeche diye gaye options mein se ek chunein.",
+    ur: "معذرت، میں سمجھ نہیں سکا۔ نیچے دیے گئے آپشنز میں سے ایک چنیں۔",
+  },
+  intentButtons: {
+    en: "Here's how I can help — please choose an option below.",
+    ur_roman: "Main is tarah madad kar sakta hoon — neeche se ek option chunein.",
+    ur: "میں اس طرح مدد کر سکتا ہوں — نیچے سے ایک آپشن چنیں۔",
+  },
+  questionLater: {
+    en: "Our team will answer that when they get in touch. For now — {question}",
+    ur_roman: "Is ka jawab hamari team rabta karne par degi. Filhal — {question}",
+    ur: "اس کا جواب ہماری ٹیم رابطہ کرنے پر دے گی۔ فی الحال — {question}",
   },
 };

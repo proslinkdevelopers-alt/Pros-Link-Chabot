@@ -38,12 +38,11 @@ export interface ChatbotAnalytics {
   followUpsSent: number;
   optOuts: number;
   enterprise: number;
-  aiReplies: number;
   fallbacks: number;
   flowsStarted: number;
   flowsCompleted: number;
   /** Share of conversations the assistant handled without a person. */
-  aiResolutionRate: number;
+  selfServiceRate: number;
   /** Average seconds from a customer message to the next reply. */
   responseSeconds: number | null;
   sendFailures: number;
@@ -85,11 +84,10 @@ const EMPTY: ChatbotAnalytics = {
   followUpsSent: 0,
   optOuts: 0,
   enterprise: 0,
-  aiReplies: 0,
   fallbacks: 0,
   flowsStarted: 0,
   flowsCompleted: 0,
-  aiResolutionRate: 0,
+  selfServiceRate: 0,
   responseSeconds: null,
   sendFailures: 0,
   revenue: 0,
@@ -256,11 +254,10 @@ export async function chatbotAnalytics(days: number): Promise<QueryResult<Chatbo
       followUpsSent: event("FOLLOW_UP_SENT"),
       optOuts: event("OPTED_OUT"),
       enterprise: event("ENTERPRISE_DETECTED"),
-      aiReplies: event("AI_REPLY"),
       fallbacks: event("FALLBACK"),
       flowsStarted: event("FLOW_STARTED"),
       flowsCompleted: event("FLOW_COMPLETED"),
-      aiResolutionRate: conversations ? Math.round(((conversations - handedOff) / conversations) * 1000) / 10 : 0,
+      selfServiceRate: conversations ? Math.round(((conversations - handedOff) / conversations) * 1000) / 10 : 0,
       responseSeconds: response[0]?.seconds ?? null,
       sendFailures,
       revenue: revenueBySource.reduce((sum, row) => sum + row.count, 0),

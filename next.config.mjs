@@ -66,7 +66,7 @@ const nextConfig = {
       }
     : {}),
   // Keep server-only packages out of the client/edge bundle (Next 15 top-level key).
-  serverExternalPackages: ["@prisma/client", "@anthropic-ai/sdk", "ioredis"],
+  serverExternalPackages: ["@prisma/client", "ioredis"],
   async rewrites() {
     return [
       // The WhatsApp callback URL registered with Meta is the short, public

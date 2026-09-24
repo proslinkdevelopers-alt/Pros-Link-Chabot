@@ -12,9 +12,9 @@ import { BRAND } from "@/config/brand";
 /**
  * A WhatsApp conversation with the real assistant, inside the console.
  *
- * Buttons and lists behave as they do on a phone, the live configuration and
- * model answer, and nothing reaches WhatsApp or the CRM — the panel on the
- * right shows what the team *would* have received instead.
+ * Buttons and lists behave as they do on a phone, the live configuration
+ * answers, and nothing reaches WhatsApp or the CRM — the panel on the right
+ * shows what the team *would* have received instead.
  */
 
 type Bubble = { from: "customer" } & { text: string } | ({ from: "bot" } & { message: Outgoing });

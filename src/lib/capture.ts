@@ -11,7 +11,6 @@ import {
   todayInPakistan,
   type CustomerDetails,
 } from "@/lib/ai/customer";
-import type { CustomerContext } from "@/lib/ai/system-prompt";
 import type { CapturedRecord } from "@/types";
 
 /**
@@ -100,16 +99,6 @@ export function readCapture(value: unknown): CaptureState {
     customerId: text("customerId"),
     updatedAt: text("updatedAt"),
     bot: stored.bot,
-  };
-}
-
-/** The record references a capture has produced, in the shape the prompt takes. */
-export function recordsOf(state: CaptureState): CustomerContext["records"] {
-  return {
-    lead: state.leadReference,
-    meeting: state.meetingReference,
-    ticket: state.ticketReference,
-    quote: state.quoteReference,
   };
 }
 

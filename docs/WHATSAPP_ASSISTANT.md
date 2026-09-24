@@ -7,8 +7,7 @@ Admin ▸ Chatbot Studio and can be changed without code; defaults live in
 `src/data/bot`.
 
 Languages: English, Roman Urdu and Urdu script. The customer's language is
-detected per message; fixed wording has all three, and model answers follow the
-customer.
+detected per message, and the wording is written in all three.
 
 ---
 
@@ -76,10 +75,12 @@ such as "paper jam", "not printing", "kharab") decides:
   billing, products, partnership, careers.
 
 Quote, service, tracking and callback requests start their flow directly; a
-reference number in a message starts tracking. Other messages get an answer
-from the model, grounded in the published knowledge base and catalogue, with
-next-step buttons for the topic. Without a model, the customer is offered a
-person.
+reference number in a message starts tracking. A product named in a message
+opens its catalogue category, a price question gets the published prices or a
+quotation offer, and any other recognised topic gets its next-step buttons.
+Anything else brings back the main menu; after two such messages in a row
+(Chatbot Studio ▸ Human handover) the customer is offered a person. A question
+asked in the middle of a flow is left for the team and the flow carries on.
 
 **Prices:** none are published by default, so the assistant never quotes a
 price — it explains that prices depend on model, quantity and requirement and
@@ -126,10 +127,10 @@ Studio ▸ Scoring.
 ## Chatbot Studio sections
 
 Business hours · Teams · Published pricing · References (installations and
-reviews — empty until verified entries are added) · Assistant personality ·
-Messages & welcome · Menus · Buttons · Question flows · Answer options ·
-Intents & routing · Lead scoring · Corporate detection · Human handover ·
-Follow-up timing · Source tracking · Broadcast categories. Each section is validated before it
+reviews — empty until verified entries are added) · Messages & welcome ·
+Menus · Buttons · Question flows · Answer options · Intents & routing · Lead
+scoring · Corporate detection · Human handover · Follow-up timing · Source
+tracking · Broadcast categories. Each section is validated before it
 is saved; the Simulator (website or WhatsApp) runs the live configuration
 without sending or saving anything.
 
