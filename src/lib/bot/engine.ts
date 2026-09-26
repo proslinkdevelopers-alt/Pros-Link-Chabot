@@ -67,8 +67,8 @@ import {
  *                                          buttons and anything else the main menu
  *
  *  The assistant answers with its menus, catalogue and flows only; it never
- *  composes a reply. A message it cannot route leads back to the main menu,
- *  and after a few in a row to a person.
+ *  composes a reply. A message it cannot route always gets the main menu;
+ *  after a few in a row the menu also says how to reach a person.
  * =============================================================================
  */
 
@@ -264,9 +264,9 @@ const SAVE_FAILED = {
 
 // Defaults for messages that a messages section saved before they existed lacks.
 const NOT_UNDERSTOOD = {
-  en: "Sorry, I didn't understand that. Please choose one of the options below.",
-  ur_roman: "Maazrat, main samajh nahi saka. Neeche diye gaye options mein se ek chunein.",
-  ur: "معذرت، میں سمجھ نہیں سکا۔ نیچے دیے گئے آپشنز میں سے ایک چنیں۔",
+  en: "Thanks for your message! 😊 Please choose an option from the menu below and I'll help you right away.",
+  ur_roman: "Aap ke message ka shukriya! 😊 Neeche diye gaye menu se ek option chunein, main foran aap ki madad karta hoon.",
+  ur: "آپ کے پیغام کا شکریہ! 😊 نیچے دیے گئے مینو سے ایک آپشن چنیں، میں فوراً آپ کی مدد کرتا ہوں۔",
 };
 const INTENT_BUTTONS = {
   en: "Here's how I can help — please choose an option below.",
@@ -451,7 +451,17 @@ class Turn {
       return true;
     }
     if (this.input.text.trim()) return false;
-    await this.say(pick(messages.media, this.language));
+
+    // Nothing to attach it to: acknowledge it and carry on with the open
+    // flow's question, or the main menu.
+    const acknowledgement = pick(messages.media, this.language);
+    if (current) {
+      await this.askNext(acknowledgement);
+    } else {
+      const root = this.config.menu.nodes[this.config.menu.root];
+      const menuBody = root?.kind === "menu" ? pick(root.body, this.language) : "";
+      await this.openNode(this.config.menu.root, 0, { intro: [acknowledgement, menuBody].filter(Boolean).join("\n\n") });
+    }
     return true;
   }
 
@@ -779,14 +789,15 @@ class Turn {
       return;
     }
 
-    // Not understood: back to the main menu — and a person once that has not helped.
+    // Not understood: the main menu, every time, so the customer always has a
+    // way forward. After a few in a row its intro also says how to reach a person.
     await this.event("FALLBACK", { intent: intent ?? "GENERAL_INQUIRY" });
-    if (misses + 1 >= config.handover.lowConfidenceTurns) {
-      await this.offer(pick(config.messages.lowConfidence, this.language), this.actionChoices(["talk_to_person", "main_menu"]));
-      return;
-    }
     this.state.fallbacks = misses + 1;
-    await this.openNode(config.menu.root, 0, { intro: pick(config.messages.notUnderstood ?? NOT_UNDERSTOOD, this.language) });
+    const intro =
+      this.state.fallbacks >= config.handover.lowConfidenceTurns
+        ? config.messages.lowConfidence
+        : (config.messages.notUnderstood ?? NOT_UNDERSTOOD);
+    await this.openNode(config.menu.root, 0, { intro: pick(intro, this.language) });
   }
 
   // ---------------------------------------------------------------- Flows ---

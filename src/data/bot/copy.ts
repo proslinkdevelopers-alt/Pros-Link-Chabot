@@ -54,10 +54,9 @@ export const DEFAULT_MESSAGES: BotConfig["messages"] = {
     ur: "واپسی پر خوش آمدید! 👋 اب آپ کو ہماری اپڈیٹس دوبارہ ملیں گی۔",
   },
   media: {
-    en: "📎 Thanks — our team can see this in your conversation. I can't open files myself, so please tell me in a message what you need.",
-    ur_roman:
-      "📎 Shukriya — hamari team ise aap ki conversation mein dekh sakti hai. Main file khud nahi khol sakta, is liye message mein bata dein aap ko kya chahiye.",
-    ur: "📎 شکریہ — ہماری ٹیم اسے آپ کی گفتگو میں دیکھ سکتی ہے۔ میں فائل خود نہیں کھول سکتا، اس لیے پیغام میں بتا دیں کہ آپ کو کیا چاہیے۔",
+    en: "📎 Thanks — our team can see what you sent.",
+    ur_roman: "📎 Shukriya — hamari team aap ki bheji hui cheez dekh sakti hai.",
+    ur: "📎 شکریہ — ہماری ٹیم آپ کی بھیجی ہوئی چیز دیکھ سکتی ہے۔",
   },
   mediaAttached: {
     en: "📎 Got it — I've attached that for our team.",
@@ -121,9 +120,10 @@ export const DEFAULT_MESSAGES: BotConfig["messages"] = {
     ur: "ہماری ٹیم کال پر آپ کے کاروبار سے متعلق حوالہ جات بتا سکتی ہے۔",
   },
   lowConfidence: {
-    en: "I want to make sure you get the right answer on this. Would you like me to bring in someone from our team?",
-    ur_roman: "Main chahta hoon aap ko is ka bilkul sahi jawab mile. Kya main hamari team mein se kisi ko shamil kar doon?",
-    ur: "میں چاہتا ہوں آپ کو اس کا بالکل درست جواب ملے۔ کیا میں ہماری ٹیم میں سے کسی کو شامل کر دوں؟",
+    en: "Please choose an option from the menu below. If you'd rather speak to someone, type *talk to a person* and our team will help you.",
+    ur_roman:
+      "Neeche diye gaye menu se ek option chunein. Agar aap kisi se baat karna chahein to *kisi se baat* likhein, hamari team aap ki madad karegi.",
+    ur: "نیچے دیے گئے مینو سے ایک آپشن چنیں۔ اگر آپ کسی سے بات کرنا چاہیں تو *کسی سے بات* لکھیں، ہماری ٹیم آپ کی مدد کرے گی۔",
   },
   unknownButton: {
     en: "That option isn't available any more — here's the main menu.",
@@ -184,9 +184,9 @@ export const DEFAULT_MESSAGES: BotConfig["messages"] = {
     ur: "معذرت — آپ کی درخواست محفوظ کرتے ہوئے مسئلہ پیش آیا، اس لیے ابھی جمع نہیں ہوئی۔ دوبارہ کوشش کے لیے کوئی بھی پیغام بھیجیں، یا *Talk to a Person* دبائیں۔",
   },
   notUnderstood: {
-    en: "Sorry, I didn't understand that. Please choose one of the options below.",
-    ur_roman: "Maazrat, main samajh nahi saka. Neeche diye gaye options mein se ek chunein.",
-    ur: "معذرت، میں سمجھ نہیں سکا۔ نیچے دیے گئے آپشنز میں سے ایک چنیں۔",
+    en: "Thanks for your message! 😊 Please choose an option from the menu below and I'll help you right away.",
+    ur_roman: "Aap ke message ka shukriya! 😊 Neeche diye gaye menu se ek option chunein, main foran aap ki madad karta hoon.",
+    ur: "آپ کے پیغام کا شکریہ! 😊 نیچے دیے گئے مینو سے ایک آپشن چنیں، میں فوراً آپ کی مدد کرتا ہوں۔",
   },
   intentButtons: {
     en: "Here's how I can help — please choose an option below.",

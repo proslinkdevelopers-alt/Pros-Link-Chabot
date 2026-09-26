@@ -299,7 +299,7 @@ export const sectionSchemas = {
   handover: z.object({
     /** Stay silent on a thread after it is handed to a person. */
     pauseBot: z.boolean(),
-    /** Offer a person after this many typed messages in a row the assistant could not route. */
+    /** After this many typed messages in a row it could not route, the main menu also says how to reach a person. */
     lowConfidenceTurns: z.number().int().min(1).max(10),
     /** Tell the team, with a full summary, when a lead reaches these bands. */
     notifyTemperatures: z.array(z.enum(TEMPERATURES)),

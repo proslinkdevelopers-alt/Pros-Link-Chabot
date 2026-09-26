@@ -153,17 +153,24 @@ describe("typed messages", () => {
   it("brings a message it cannot route back to the main menu", async () => {
     const chat = new TestConversation();
     const out = await chat.send("Tell me about your company");
-    assert.match(textOf(out), /didn't understand that/);
-    assert.ok(ids(out).includes("n:products"));
+    assert.match(textOf(out), /Thanks for your message/);
+    assert.doesNotMatch(textOf(out), /can't|cannot|didn't understand/);
+    assert.deepEqual(ids(out), MAIN_MENU);
     assert.ok(chat.events().includes("FALLBACK"));
   });
 
-  it("offers a person after repeated messages it could not route", async () => {
+  it("keeps showing the main menu, and how to reach a person, after repeated messages it could not route", async () => {
     const chat = new TestConversation();
     await chat.send("Tell me about your company");
-    const out = await chat.send("What about the weather?");
-    assert.match(textOf(out), /bring in someone from our team/);
-    assert.deepEqual(ids(out), ["a:talk_to_person", "a:main_menu"]);
+    let out = await chat.send("What about the weather?");
+    assert.match(textOf(out), /type \*talk to a person\*/);
+    assert.deepEqual(ids(out), MAIN_MENU);
+
+    out = await chat.send("asdf qwerty");
+    assert.deepEqual(ids(out), MAIN_MENU);
+
+    out = await chat.send("talk to a person");
+    assert.ok(ids(out).includes("n:expert_sales"));
   });
 
   it("starts counting again once a message is routed", async () => {
@@ -171,7 +178,7 @@ describe("typed messages", () => {
     await chat.send("Tell me about your company");
     await chat.send("What do you sell?");
     const out = await chat.send("What about the weather?");
-    assert.match(textOf(out), /didn't understand that/);
+    assert.match(textOf(out), /Thanks for your message/);
   });
 
   it("starts a service request in Roman Urdu", async () => {
@@ -365,11 +372,22 @@ describe("service requests", () => {
     assert.equal(chat.records.ticket, "PL-TKT-TEST");
   });
 
-  it("tells the customer a photo reached the team when there is nothing to attach it to", async () => {
+  it("acknowledges a photo with nothing to attach it to and shows the main menu", async () => {
     const chat = new TestConversation();
     const out = await chat.upload();
-    assert.match(textOf(out), /can't open files myself/);
+    assert.match(textOf(out), /our team can see what you sent/);
+    assert.doesNotMatch(textOf(out), /can't/);
+    assert.deepEqual(ids(out), MAIN_MENU);
     assert.equal(chat.effectsOf("attach").length, 0);
+  });
+
+  it("acknowledges a photo sent mid-flow and asks the flow's question again", async () => {
+    const chat = new TestConversation();
+    await chat.tap("n:quote");
+    const out = await chat.upload();
+    assert.match(textOf(out), /our team can see what you sent/);
+    assert.equal(ids(out)[0], "c:productCategory:0");
+    assert.equal(chat.state.flow?.id, "quote");
   });
 });
 

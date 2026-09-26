@@ -54,8 +54,8 @@ Sign in at `/login` with the seeded Super Admin, then:
    accurate.
 
 The assistant works from its menus, catalogue views and request forms only.
-A typed message it cannot route brings back the main menu, and repeated ones
-offer a person.
+A typed message it cannot route always gets the main menu, and after repeated
+ones the menu also says how to reach a person.
 
 ## Scripts
 

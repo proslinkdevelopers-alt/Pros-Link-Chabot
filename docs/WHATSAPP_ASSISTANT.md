@@ -78,8 +78,11 @@ Quote, service, tracking and callback requests start their flow directly; a
 reference number in a message starts tracking. A product named in a message
 opens its catalogue category, a price question gets the published prices or a
 quotation offer, and any other recognised topic gets its next-step buttons.
-Anything else brings back the main menu; after two such messages in a row
-(Chatbot Studio ▸ Human handover) the customer is offered a person. A question
+Anything else — whatever it says — gets the main menu, never a "can't help";
+after two such messages in a row (Chatbot Studio ▸ Human handover) the menu's
+intro also tells the customer to type *talk to a person*. A photo or document
+with nothing to attach it to is acknowledged, followed by the open flow's
+question or the main menu. A question
 asked in the middle of a flow is left for the team and the flow carries on.
 
 **Prices:** none are published by default, so the assistant never quotes a
