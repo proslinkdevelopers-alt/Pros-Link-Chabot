@@ -2,7 +2,7 @@
 
 The customer assistant, CRM and admin console for **Pros-Link** — _Your
 Trusted Office Solutions Partner_. Pros-Link supplies digital duplicators,
-photocopiers and MFPs, printers, office equipment, office supplies,
+photocopiers and MFPs, printers, office equipment, stationery and papers,
 consumables and parts to businesses across Pakistan, with installation,
 maintenance, repair and technical support.
 

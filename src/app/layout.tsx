@@ -24,6 +24,7 @@ export const metadata: Metadata = {
     "MFP",
     "printer",
     "office supplies",
+    "stationery and paper",
     "toner and consumables",
     "photocopier repair",
     "printer maintenance",

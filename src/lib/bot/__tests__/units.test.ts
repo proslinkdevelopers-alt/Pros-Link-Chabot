@@ -67,6 +67,7 @@ describe("classification", () => {
     ["mera printer kharab ho gaya hai", "SERVICE_REQUEST", "PRINTER", "SERVICE_REQUEST"],
     ["toner cartridges chahiye", "CONSUMABLES", "CONSUMABLES", undefined],
     ["We need A4 paper and stationery for the office", "OFFICE_SUPPLIES", "OFFICE_SUPPLIES", undefined],
+    ["Do you have stationries?", "OFFICE_SUPPLIES", "OFFICE_SUPPLIES", undefined],
     ["Can you install the machine next week?", "INSTALLATION", "INSTALLATION", undefined],
     ["We want an annual maintenance contract", "MAINTENANCE", "MAINTENANCE", undefined],
     ["What is the status of PL-TKT-7F3K2Q9A", "TRACK_REQUEST", undefined, "TRACK_REQUEST"],

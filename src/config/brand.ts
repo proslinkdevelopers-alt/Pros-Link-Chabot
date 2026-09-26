@@ -39,7 +39,7 @@ export const BRAND = {
     "Photocopiers / MFPs",
     "Printers",
     "Office Equipment",
-    "Office Supplies",
+    "Stationery & Papers",
     "Consumables",
     "Parts & Accessories",
     "Installation",

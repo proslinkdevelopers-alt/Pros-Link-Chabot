@@ -40,9 +40,10 @@ const SERVICE_KEYWORDS: Partial<Record<BotIntent, Weighted>> = {
     ["laminator", 4], ["laminating machine", 5], ["binding machine", 4], ["paper cutter", 4],
   ],
   OFFICE_SUPPLIES: [
-    ["office supplies", 6], ["stationery", 5], ["stationary", 4], ["a4 paper", 5], ["copy paper", 5], ["paper ream", 5],
+    ["office supplies", 6], ["stationery", 5], ["stationary", 4], ["stationeries", 5], ["stationaries", 4],
+    ["stationries", 4], ["stationry", 4], ["a4 paper", 5], ["copy paper", 5], ["paper ream", 5],
     ["photocopy paper", 6], ["photostat paper", 6], ["printing paper", 5],
-    ["paper rim", 5], ["legal paper", 4], ["کاغذ", 3], ["سٹیشنری", 5],
+    ["paper rim", 5], ["legal paper", 4], ["کاغذ", 3], ["سٹیشنری", 5], ["اسٹیشنری", 5],
   ],
   CONSUMABLES: [
     ["toner", 6], ["toner cartridge", 6], ["ink cartridge", 6], ["cartridge", 5], ["refill", 3], ["ink", 3],

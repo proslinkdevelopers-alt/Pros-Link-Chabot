@@ -103,11 +103,11 @@ const MAIN: Nodes = {
 
   supplies: {
     kind: "menu",
-    title: { en: "Office Supplies", ur_roman: "Office Supplies", ur: "آفس سپلائیز" },
+    title: { en: "Stationery", ur_roman: "Stationery", ur: "اسٹیشنری" },
     description: {
-      en: "Paper, toner, consumables and parts",
-      ur_roman: "Paper, toner, consumables aur parts",
-      ur: "کاغذ، ٹونر، کنزیومیبلز اور پارٹس",
+      en: "Stationery, papers, toner and parts",
+      ur_roman: "Stationery, papers, toner aur parts",
+      ur: "اسٹیشنری، کاغذ، ٹونر اور پارٹس",
     },
     body: {
       en: "📦 What are you looking for?",
@@ -169,9 +169,9 @@ const MAIN: Nodes = {
     do: {
       type: "say",
       body: {
-        en: `*${BRAND.name}* — ${BRAND.tagline}\n\n${BRAND.description}\n\nWe offer digital duplicators, photocopiers and MFPs, printers, office equipment, office supplies, consumables, and parts and accessories — with installation, maintenance, repair, technical support and customer care.`,
-        ur_roman: `*${BRAND.name}* — Your Trusted Office Solutions Partner\n\nPros-Link Pakistan bhar mein businesses ko office equipment aur office solutions faraham karta hai, nationwide sales aur distribution aur after-sales support ke saath.\n\nHum digital duplicators, photocopiers aur MFPs, printers, office equipment, office supplies, consumables aur parts faraham karte hain — installation, maintenance, repair, technical support aur customer care ke saath.`,
-        ur: "*پروس لنک* — Your Trusted Office Solutions Partner\n\nپروس لنک پورے پاکستان میں کاروباروں کو آفس ایکوپمنٹ اور آفس سلوشنز فراہم کرتا ہے، ملک گیر سیلز اور ڈسٹری بیوشن اور بعد از فروخت سپورٹ کے ساتھ۔\n\nہم ڈیجیٹل ڈپلیکیٹرز، فوٹو کاپیئرز اور ایم ایف پیز، پرنٹرز، آفس ایکوپمنٹ، آفس سپلائیز، کنزیومیبلز اور پارٹس فراہم کرتے ہیں — انسٹالیشن، مینٹیننس، مرمت، تکنیکی مدد اور کسٹمر کیئر کے ساتھ۔",
+        en: `*${BRAND.name}* — ${BRAND.tagline}\n\n${BRAND.description}\n\nWe offer digital duplicators, photocopiers and MFPs, printers, office equipment, stationery and papers, consumables, and parts and accessories — with installation, maintenance, repair, technical support and customer care.`,
+        ur_roman: `*${BRAND.name}* — Your Trusted Office Solutions Partner\n\nPros-Link Pakistan bhar mein businesses ko office equipment aur office solutions faraham karta hai, nationwide sales aur distribution aur after-sales support ke saath.\n\nHum digital duplicators, photocopiers aur MFPs, printers, office equipment, stationery aur papers, consumables aur parts faraham karte hain — installation, maintenance, repair, technical support aur customer care ke saath.`,
+        ur: "*پروس لنک* — Your Trusted Office Solutions Partner\n\nپروس لنک پورے پاکستان میں کاروباروں کو آفس ایکوپمنٹ اور آفس سلوشنز فراہم کرتا ہے، ملک گیر سیلز اور ڈسٹری بیوشن اور بعد از فروخت سپورٹ کے ساتھ۔\n\nہم ڈیجیٹل ڈپلیکیٹرز، فوٹو کاپیئرز اور ایم ایف پیز، پرنٹرز، آفس ایکوپمنٹ، اسٹیشنری اور کاغذ، کنزیومیبلز اور پارٹس فراہم کرتے ہیں — انسٹالیشن، مینٹیننس، مرمت، تکنیکی مدد اور کسٹمر کیئر کے ساتھ۔",
       },
       actions: ["explore_products", "contact_us", "main_menu"],
     },
@@ -272,7 +272,7 @@ const REPAIR: Nodes = {
 const SUPPLIES: Nodes = {
   sup_office: {
     kind: "action",
-    title: { en: "Office Supplies", ur_roman: "Office Supplies", ur: "آفس سپلائیز" },
+    title: { en: "Stationery & Papers", ur_roman: "Stationery & Papers", ur: "اسٹیشنری اور کاغذ" },
     do: { type: "catalog", category: "office-supplies" },
     intent: "OFFICE_SUPPLIES",
   },
@@ -292,7 +292,7 @@ const SUPPLIES: Nodes = {
     kind: "action",
     title: { en: "Order Supplies", ur_roman: "Supplies Order Karein", ur: "سپلائیز آرڈر کریں" },
     description: { en: "Request a quotation for supplies", ur_roman: "Supplies ki quotation mangwayein", ur: "سپلائیز کی کوٹیشن منگوائیں" },
-    do: { type: "flow", flow: "quote", context: { interest: "Office supplies", team: "PARTS" } },
+    do: { type: "flow", flow: "quote", context: { interest: "Stationery & supplies", team: "PARTS" } },
     team: "PARTS",
   },
 };

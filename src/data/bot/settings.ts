@@ -26,7 +26,7 @@ export const DEFAULT_INTENTS: BotConfig["intents"] = {
   PHOTOCOPIER: { team: "SALES", categorySlug: "photocopiers-mfps", interest: "Photocopier / MFP", actions: PRODUCT, keywords: [] },
   PRINTER: { team: "SALES", categorySlug: "printers", interest: "Printer", actions: PRODUCT, keywords: [] },
   OFFICE_EQUIPMENT: { team: "SALES", categorySlug: "office-equipment", interest: "Office equipment", actions: PRODUCT, keywords: [] },
-  OFFICE_SUPPLIES: { team: "PARTS", categorySlug: "office-supplies", interest: "Office supplies", actions: ["get_quote", "explore_products", "talk_to_sales"], keywords: [] },
+  OFFICE_SUPPLIES: { team: "PARTS", categorySlug: "office-supplies", interest: "Stationery & papers", actions: ["get_quote", "explore_products", "talk_to_sales"], keywords: [] },
   CONSUMABLES: { team: "PARTS", categorySlug: "consumables", interest: "Consumables", actions: ["request_parts", "get_quote", "explore_products"], keywords: [] },
   PARTS_ACCESSORIES: { team: "PARTS", categorySlug: "parts-accessories", interest: "Parts & accessories", actions: ["request_parts", "explore_products", "talk_to_support"], keywords: [] },
   INSTALLATION: { team: "SERVICE", interest: "Installation", actions: ["request_installation", "talk_to_support", "main_menu"], keywords: [] },

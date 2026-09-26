@@ -20,7 +20,7 @@ Welcome to Pros-Link
 ├─ Installation & Support ─ New Installation · Technical Support · Maintenance · Repair ·
 │                           Service Request · Parts Request · General Support
 ├─ Repair / Maintenance ─── Request Repair · Maintenance Visit · Track a Repair
-├─ Office Supplies ──────── Office Supplies · Toner & Consumables · Parts & Accessories · Order Supplies
+├─ Stationery ───────────── Stationery & Papers · Toner & Consumables · Parts & Accessories · Order Supplies
 ├─ Talk to Sales ────────── handover to the sales team
 ├─ Customer Support ─────── Ask a Question · Submit a Complaint · Request Service ·
 │                           Replacement Parts · Product Information · Request a Callback · Talk to Support

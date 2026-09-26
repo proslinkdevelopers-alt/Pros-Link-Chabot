@@ -18,6 +18,16 @@ describe("welcome and menus", () => {
     assert.deepEqual(ids(out), MAIN_MENU);
   });
 
+  it("offers Stationery on the main menu, with Stationery & Papers inside it", async () => {
+    const chat = new TestConversation();
+    const menu = await chat.send("menu");
+    assert.ok(titles(menu).includes("Stationery"));
+    assert.ok(!titles(menu).includes("Office Supplies"));
+
+    const out = await chat.tap("n:supplies");
+    assert.deepEqual(titles(out).slice(0, 2), ["Stationery & Papers", "Toner & Consumables"]);
+  });
+
   it("ends every sub-menu with Main Menu", async () => {
     const chat = new TestConversation();
     const out = await chat.tap("n:service");

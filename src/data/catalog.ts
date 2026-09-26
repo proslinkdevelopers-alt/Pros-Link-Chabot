@@ -61,10 +61,10 @@ export const DEFAULT_CATEGORIES: CategorySeed[] = [
   },
   {
     slug: "office-supplies",
-    name: "Office Supplies",
-    description: "Paper and day-to-day office supplies.",
+    name: "Stationery & Papers",
+    description: "Stationery, paper and day-to-day office supplies.",
     icon: "paperclip",
-    keywords: ["office supplies", "stationery", "paper", "a4 paper", "supplies"],
+    keywords: ["stationery", "stationary", "papers", "paper", "a4 paper", "office supplies", "supplies"],
   },
   {
     slug: "consumables",
