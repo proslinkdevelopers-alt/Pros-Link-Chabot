@@ -39,8 +39,8 @@
     "ioredis": "^5.7.0",
     "jose": "^6.1.0",
     "lucide-react": "^0.544.0",
-    "next": "^15.5.21",
-    "postcss": "^8.5.6",
+    "next": "^15.5.26",
+    "postcss": "^8.5.23",
     "prisma": "^6.14.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
@@ -52,5 +52,10 @@
   },
   "devDependencies": {
     "tsx": "^4.20.0"
+  },
+  "//overrides": "Security pins for transitive dependencies whose parents still ship a vulnerable version. next 15 pins postcss 8.4.31 (sourceMappingURL file disclosure, </style> XSS), so its copy follows ours. Every prisma release, 8.0 RCs included, pins deepmerge-ts 7.1.5 (stack exhaustion); prisma only calls its plain deepmerge() to merge a prisma.config file, which v8 keeps unchanged. Drop each pin once its parent ships the fix.",
+  "overrides": {
+    "postcss": "$postcss",
+    "deepmerge-ts": "^8.0.2"
   }
 }
