@@ -267,6 +267,99 @@ const REPAIR: Nodes = {
   },
 };
 
+// ------------------------------------------------------------ Photocopiers --
+//
+// What a customer asking for a photocopier gets, typed or from Products, in
+// place of the category's product list (PHOTOCOPIER's `node` in settings.ts).
+
+const copierQuote = (interest: string) => ({
+  type: "flow" as const,
+  flow: "quote" as const,
+  context: { intent: "PHOTOCOPIER" as const, categorySlug: "photocopiers-mfps", interest, team: "SALES" as const },
+});
+
+/**
+ * A printing speed for a copier type: the range as the row title, the office
+ * it suits underneath (a row title holds only 24 characters). Starts a quote
+ * with both as the interest, e.g. "A3 Photocopier · 30–35 PPM (Medium Office)".
+ */
+const copierSpeed = (type: string, speed: string, suits: Nodes[string]["title"]): Nodes[string] => ({
+  kind: "action",
+  title: { en: speed },
+  description: suits,
+  do: copierQuote(`${type} · ${speed} (${suits.en})`),
+  intent: "PHOTOCOPIER",
+  team: "SALES",
+});
+
+const PHOTOCOPIERS: Nodes = {
+  photocopiers: {
+    kind: "menu",
+    title: { en: "Photocopiers / MFPs", ur_roman: "Photocopiers / MFPs", ur: "فوٹو کاپیئر / ایم ایف پی" },
+    body: {
+      en: "🖨️ Which type of photocopier are you looking for?",
+      ur_roman: "🖨️ Aap kis qism ka photocopier dhoond rahe hain?",
+      ur: "🖨️ آپ کس قسم کا فوٹو کاپیئر ڈھونڈ رہے ہیں؟",
+    },
+    children: ["copier_a3", "copier_a4_mfp", "copier_high_speed", "copier_color_mfp", "copier_quote", "sales"],
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+  copier_a3: {
+    kind: "menu",
+    title: { en: "A3 Photocopier", ur_roman: "A3 Photocopier", ur: "A3 فوٹو کاپیئر" },
+    body: {
+      en: "*A3 Photocopier*\nPlease select your required printing speed:",
+      ur_roman: "*A3 Photocopier*\nApni zaroorat ke mutabiq printing speed chunein:",
+      ur: "*A3 فوٹو کاپیئر*\nاپنی ضرورت کے مطابق پرنٹنگ اسپیڈ منتخب کریں:",
+    },
+    children: ["a3_ppm_20", "a3_ppm_30", "a3_ppm_40", "a3_ppm_50", "a3_ppm_60", "a3_ppm_unsure"],
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+  a3_ppm_20: copierSpeed("A3 Photocopier", "20–25 PPM", { en: "Small Office", ur_roman: "Chhota office", ur: "چھوٹا دفتر" }),
+  a3_ppm_30: copierSpeed("A3 Photocopier", "30–35 PPM", { en: "Medium Office", ur_roman: "Darmiyana office", ur: "درمیانہ دفتر" }),
+  a3_ppm_40: copierSpeed("A3 Photocopier", "40–45 PPM", { en: "Busy Office", ur_roman: "Masroof office", ur: "مصروف دفتر" }),
+  a3_ppm_50: copierSpeed("A3 Photocopier", "50–60 PPM", { en: "High Volume", ur_roman: "Zyada volume", ur: "زیادہ والیوم" }),
+  a3_ppm_60: copierSpeed("A3 Photocopier", "60+ PPM", { en: "High-Speed", ur_roman: "High-Speed", ur: "ہائی اسپیڈ" }),
+  a3_ppm_unsure: {
+    kind: "action",
+    title: { en: "Not Sure", ur_roman: "Pata Nahi", ur: "معلوم نہیں" },
+    description: { en: "Help Me Choose", ur_roman: "Chunne mein madad karein", ur: "انتخاب میں مدد کریں" },
+    do: copierQuote("A3 Photocopier · speed not sure, help choosing"),
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+  copier_a4_mfp: {
+    kind: "action",
+    title: { en: "A4 MFP", ur_roman: "A4 MFP", ur: "A4 ایم ایف پی" },
+    do: copierQuote("A4 MFP"),
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+  copier_high_speed: {
+    kind: "action",
+    title: { en: "High-Speed Copier", ur_roman: "High-Speed Copier", ur: "ہائی اسپیڈ کاپیئر" },
+    do: copierQuote("High-Speed Copier"),
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+  copier_color_mfp: {
+    kind: "action",
+    title: { en: "Color MFP", ur_roman: "Color MFP", ur: "کلر ایم ایف پی" },
+    do: copierQuote("Color MFP"),
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+  copier_quote: {
+    kind: "action",
+    title: { en: "Request a Quote", ur_roman: "Quotation Lein", ur: "کوٹیشن لیں" },
+    do: copierQuote("Photocopier / MFP"),
+    intent: "PHOTOCOPIER",
+    team: "SALES",
+  },
+};
+
 // -------------------------------------------------------------- Supplies ----
 
 const SUPPLIES: Nodes = {
@@ -394,7 +487,7 @@ const EXPERT: Nodes = {
 
 export const DEFAULT_MENU: BotConfig["menu"] = {
   root: "root",
-  nodes: { ...MAIN, ...SERVICE, ...REPAIR, ...SUPPLIES, ...SUPPORT, ...EXPERT },
+  nodes: { ...MAIN, ...PHOTOCOPIERS, ...SERVICE, ...REPAIR, ...SUPPLIES, ...SUPPORT, ...EXPERT },
 };
 
 // ----------------------------------------------------------------- Actions --

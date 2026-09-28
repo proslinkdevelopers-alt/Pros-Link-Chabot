@@ -103,9 +103,58 @@ describe("catalogue", () => {
 
   it("opens the matching category when asked for a product range in words", async () => {
     const chat = new TestConversation();
-    const out = await chat.send("Show me your photocopier catalogue");
-    assert.match(textOf(out), /Photocopiers \/ MFPs/);
-    assert.equal(chat.details.productCategory, "photocopiers-mfps");
+    const out = await chat.send("Do you sell printers?");
+    assert.match(textOf(out), /\*Printers\*/);
+    assert.equal(chat.details.productCategory, "printers");
+  });
+
+  it("offers the photocopier types, a quote and sales for photocopiers, picked or typed", async () => {
+    const PHOTOCOPIER_MENU = [
+      "n:copier_a3", "n:copier_a4_mfp", "n:copier_high_speed", "n:copier_color_mfp", "n:copier_quote", "n:sales", "a:main_menu",
+    ];
+    const picked = new TestConversation();
+    let out = await picked.tap("cat:photocopiers-mfps");
+    assert.match(textOf(out), /Which type of photocopier/);
+    assert.deepEqual(ids(out), PHOTOCOPIER_MENU);
+    assert.deepEqual(titles(out).slice(0, 6), ["A3 Photocopier", "A4 MFP", "High-Speed Copier", "Color MFP", "Request a Quote", "Talk to Sales"]);
+    assert.equal(picked.details.productCategory, "photocopiers-mfps");
+    assert.equal(picked.state.intent, "PHOTOCOPIER");
+
+    const typed = new TestConversation();
+    out = await typed.send("I need a photocopier for my office.");
+    assert.deepEqual(ids(out), PHOTOCOPIER_MENU);
+
+    out = await typed.tap("n:copier_a4_mfp");
+    assert.equal(typed.state.flow?.id, "quote");
+    assert.equal(typed.state.flow?.pending, "requirements");
+    assert.equal(typed.details.interest, "A4 MFP");
+    assert.equal(typed.details.productCategory, "photocopiers-mfps");
+  });
+
+  it("asks the printing speed for an A3 photocopier and quotes for the one picked", async () => {
+    const chat = new TestConversation();
+    await chat.tap("cat:photocopiers-mfps");
+    let out = await chat.tap("n:copier_a3");
+    assert.match(textOf(out), /A3 Photocopier\*\nPlease select your required printing speed:/);
+    assert.deepEqual(ids(out), ["n:a3_ppm_20", "n:a3_ppm_30", "n:a3_ppm_40", "n:a3_ppm_50", "n:a3_ppm_60", "n:a3_ppm_unsure", "a:main_menu"]);
+    assert.deepEqual(titles(out).slice(0, 6), ["20–25 PPM", "30–35 PPM", "40–45 PPM", "50–60 PPM", "60+ PPM", "Not Sure"]);
+    const [list] = out;
+    assert.ok(list.type === "list");
+    assert.deepEqual(
+      list.rows.slice(0, 6).map((row) => row.description),
+      ["Small Office", "Medium Office", "Busy Office", "High Volume", "High-Speed", "Help Me Choose"]
+    );
+
+    await chat.tap("n:a3_ppm_30");
+    assert.equal(chat.state.flow?.id, "quote");
+    assert.equal(chat.state.flow?.pending, "requirements");
+    assert.equal(chat.details.interest, "A3 Photocopier · 30–35 PPM (Medium Office)");
+
+    const unsure = new TestConversation();
+    await unsure.tap("n:copier_a3");
+    await unsure.tap("n:a3_ppm_unsure");
+    assert.equal(unsure.state.flow?.id, "quote");
+    assert.equal(unsure.details.interest, "A3 Photocopier · speed not sure, help choosing");
   });
 
   it("shows the categories when asked what is sold", async () => {

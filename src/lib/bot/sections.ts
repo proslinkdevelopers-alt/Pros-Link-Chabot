@@ -51,7 +51,7 @@ export const SECTION_INFO: Record<SectionKey, { title: string; group: string; de
   intents: {
     title: "Intents & routing",
     group: "Automation",
-    description: "For each intent: the team it routes to, the product category it maps to, the buttons under an answer and extra keywords that detect it.",
+    description: "For each intent: the team it routes to, the product category it maps to, the menu shown for that category (`node`), the buttons under an answer and extra keywords that detect it.",
   },
   scoring: {
     title: "Lead scoring",

@@ -15,7 +15,10 @@ detected per message, and the wording is written in all three.
 
 ```
 Welcome to Pros-Link
-├─ Products ─────────────── categories → products → details (specs, availability, brochures)
+├─ Products ─────────────── categories → products → details (specs, availability, brochures);
+│                           Photocopiers / MFPs → A3 Photocopier · A4 MFP · High-Speed Copier ·
+│                           Color MFP · Request a Quote · Talk to Sales;
+│                           A3 Photocopier → 20–25 · 30–35 · 40–45 · 50–60 · 60+ PPM · Not Sure
 ├─ Request a Quote ──────── quote flow
 ├─ Installation & Support ─ New Installation · Technical Support · Maintenance · Repair ·
 │                           Service Request · Parts Request · General Support
@@ -41,6 +44,16 @@ lists **published** products only, shows exactly the specifications,
 features, availability and documents entered, and names a brand only when it is
 verified and active. An empty category offers a quotation, a callback or the
 sales team instead of inventing products.
+
+A category whose topic has a menu of its own (Chatbot Studio ▸ Intents &
+routing, the topic's `node`) shows that menu instead of its product list,
+whether the customer picks it under Products or types it. Photocopiers / MFPs
+does: the customer picks A3 Photocopier, A4 MFP, High-Speed Copier or Color
+MFP, which starts a quote with that type recorded as the interest, or goes
+straight to a quote or the sales team. A3 Photocopier first asks for the
+printing speed (20–25 PPM for a small office up to 60+ PPM, or *Not Sure —
+Help Me Choose*); the quote's interest then reads e.g. "A3 Photocopier ·
+30–35 PPM (Medium Office)".
 
 ## Flows and what they create
 

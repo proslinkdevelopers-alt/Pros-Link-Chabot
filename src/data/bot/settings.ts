@@ -23,7 +23,7 @@ const SERVICE = ["request_repair", "request_maintenance", "talk_to_support"];
 
 export const DEFAULT_INTENTS: BotConfig["intents"] = {
   DIGITAL_DUPLICATOR: { team: "SALES", categorySlug: "digital-duplicators", interest: "Digital duplicator", actions: PRODUCT, keywords: [] },
-  PHOTOCOPIER: { team: "SALES", categorySlug: "photocopiers-mfps", interest: "Photocopier / MFP", actions: PRODUCT, keywords: [] },
+  PHOTOCOPIER: { team: "SALES", categorySlug: "photocopiers-mfps", interest: "Photocopier / MFP", node: "photocopiers", actions: PRODUCT, keywords: [] },
   PRINTER: { team: "SALES", categorySlug: "printers", interest: "Printer", actions: PRODUCT, keywords: [] },
   OFFICE_EQUIPMENT: { team: "SALES", categorySlug: "office-equipment", interest: "Office equipment", actions: PRODUCT, keywords: [] },
   OFFICE_SUPPLIES: { team: "PARTS", categorySlug: "office-supplies", interest: "Stationery & papers", actions: ["get_quote", "explore_products", "talk_to_sales"], keywords: [] },

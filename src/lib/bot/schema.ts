@@ -226,7 +226,7 @@ export const sectionSchemas = {
       categorySlug: z.string().optional(),
       /** What the lead is interested in, in words, e.g. "Photocopier / MFP". */
       interest: z.string().optional(),
-      /** Menu node that explains it. */
+      /** Menu node that explains it. For a product range, shown in place of the category's product list. */
       node: z.string().optional(),
       /** Buttons offered under an answer about it. */
       actions: z.array(text),

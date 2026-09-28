@@ -363,11 +363,10 @@ function AssistantPreview() {
             I need a photocopier for my office.
           </p>
           <p className="w-fit max-w-[85%] rounded-lg rounded-tl-sm border bg-white px-3 py-2">
-            Happy to help. Roughly how many pages does your office copy or print in a month, and do you also need
-            scanning?
+            Which type of photocopier are you looking for?
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {["Photocopiers / MFPs", "Request a Quote", "Talk to Sales"].map((label) => (
+            {["A3 Photocopier", "A4 MFP", "High-Speed Copier", "Color MFP", "Request a Quote", "Talk to Sales"].map((label) => (
               <span key={label} className="rounded-md border border-brand-blue/25 bg-white px-2.5 py-1 text-[12px] font-medium text-brand-blue">
                 {label}
               </span>

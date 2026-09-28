@@ -641,6 +641,10 @@ class Turn {
     this.remember(category.name);
     await this.event("CATALOG_VIEWED", { value: category.slug, intent });
 
+    // A range with a menu of its own (photocopiers: A3, A4 MFP, …) offers that menu instead.
+    const menu = intent ? this.config.intents[intent]?.node : undefined;
+    if (menu && this.config.menu.nodes[menu]) return this.openNode(menu, 0);
+
     const products = await this.runtime.products(category.slug).catch(() => [] as CatalogProduct[]);
     if (!products.length) {
       await this.offer(
